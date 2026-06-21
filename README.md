@@ -1,13 +1,6 @@
 # pai-arbor
 
-基于 Next.js 的本地 RAG 聊天应用。上传 Markdown 文档构建知识库，聊天时从 Chroma 检索相关内容，再通过 Ollama 本地大模型生成回答。
-
-## 功能
-
-- **知识库导入**：上传 `.md` 文件，自动切片、向量化并写入 Chroma
-- **RAG 聊天**：基于本地知识库进行语义检索增强的对话
-- **会话管理**：多会话持久化，支持历史消息查看与删除
-- **流式输出**：支持 AI SDK 流式渲染，兼容 reasoning 思考链展示
+基于 Next.js 的本地 RAG 聊天应用。
 
 ## 技术栈
 
@@ -19,21 +12,6 @@
 | 向量数据库 | ChromaDB |
 | 对象存储 | MinIO（S3 兼容） |
 | 模型服务 | Ollama（对话 + Embedding） |
-
-## 架构
-
-```
-上传 Markdown
-    → 文本切片 (LangChain)
-    → MinIO 存原文件 + MySQL 存元数据
-    → Chroma 存向量片段
-
-用户提问
-    → Chroma 语义检索 Top-K
-    → 组装 RAG Prompt
-    → Ollama 流式生成
-    → MySQL 持久化对话
-```
 
 ## 前置依赖
 
@@ -126,10 +104,6 @@ pnpm dev
 | `MINIO_ENDPOINT` | MinIO 地址 | `http://localhost:9000` |
 | `OLLAMA_HOST` | Ollama 服务地址 | `127.0.0.1:11434` |
 | `OLLAMA_MODEL` | 对话模型名称 | `gemma4:26b` |
-
-## API
-
-`bruno/` 目录下提供了完整的 API 测试集合，可用 [Bruno](https://www.usebruno.com/) 直接导入使用。
 
 ## 开发说明
 

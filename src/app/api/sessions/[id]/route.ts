@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
-import { deleteSession } from '@/services/sessions.service';
+import { deleteSession, updateSessionTitle } from '@/services/sessions.service';
 import { withApiHandler, successResponse, badRequest } from '@/lib/api-handler';
-import { getHistory } from '@/services/message.service';
+import { getHistoryPage, PAGE_SIZE } from '@/services/message.service';
 
 interface SessionParams {
   id: string;
@@ -14,9 +14,41 @@ export const GET = withApiHandler(
 
     if (!sessionId) return badRequest('缺少会话 ID');
 
-    const messages = await getHistory(sessionId);
+    const limitParam = req.nextUrl.searchParams.get('limit');
+    const before = req.nextUrl.searchParams.get('before') ?? undefined;
+    const limit = limitParam ? Number(limitParam) : PAGE_SIZE;
 
-    return successResponse(messages);
+    const page = await getHistoryPage(sessionId, {
+      limit: Number.isFinite(limit) && limit > 0 ? limit : PAGE_SIZE,
+      before,
+    });
+
+    return successResponse(page);
+  },
+);
+
+// 更新指定会话标题
+export const PATCH = withApiHandler(
+  async (req: NextRequest, context: { params: Promise<SessionParams> }) => {
+    const { id: sessionId } = await context.params;
+
+    if (!sessionId) return badRequest('缺少会话 ID');
+
+    let title: string | undefined;
+    try {
+      const body = await req.json();
+      title = body.title;
+    } catch {
+      return badRequest('请求体格式无效');
+    }
+
+    if (typeof title !== 'string' || !title.trim()) {
+      return badRequest('标题不能为空');
+    }
+
+    const updated = await updateSessionTitle(sessionId, title);
+
+    return successResponse(updated);
   },
 );
 

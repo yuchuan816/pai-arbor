@@ -3,7 +3,7 @@ import type { InputJsonValue } from '@prisma/client/runtime/client';
 import { ollamaProvider } from '@/lib/ollama.provider';
 import { prisma } from '@/lib/prisma';
 import { VectorService } from '@/services/vector.service';
-import { saveAssistantResponse } from './message.service';
+import { saveAssistantResponse, getContextMessages } from './message.service';
 
 const vectorService = new VectorService();
 const ollamaModel = process.env.OLLAMA_MODEL ?? '';
@@ -17,12 +17,16 @@ if (typeof ollamaModel !== 'string' || ollamaModel.trim() === '') {
 /**
  * 核心业务：控制并编排整个 RAG（检索增强生成）聊天流（适配 AI SDK 5.0 Parts 架构）
  * @param sessionId 聊天会话 ID
- * @param messages 前端传过来的完整历史对白（数组元素符合 5.0 的 UIMessage 规范）
+ * @param messages 前端传过来的消息（用于校验与 UI 流式协议；模型上下文以 DB 为准）
  */
 export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
   const lastMessage = messages[messages.length - 1];
   if (!lastMessage) {
     throw new Error('消息列表不能为空');
+  }
+
+  if (lastMessage.role !== 'user') {
+    throw new Error('最后一条消息必须是用户消息');
   }
 
   // 持久化用户消息：直接将前端完整的 parts 数组写入数据库 Json 字段
@@ -33,6 +37,8 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
       parts: lastMessage.parts as InputJsonValue,
     },
   });
+
+  const contextMessages = await getContextMessages(sessionId);
 
   // 从最新的 UIMessage 结构的 parts 中提取纯文本，用于向量检索
   const lastUserContent = lastMessage.parts?.find((p) => p.type === 'text')?.text ?? '';
@@ -66,7 +72,7 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
   return streamText({
     model: ollamaProvider(ollamaModel),
     system: systemPrompt,
-    messages: await convertToModelMessages(messages),
+    messages: await convertToModelMessages(contextMessages),
 
     // 流结束后的生命周期钩子：当大模型吐完最后一个字时，组装标准的 parts 写入数据库
     onFinish: async ({ text, reasoningText}) => {

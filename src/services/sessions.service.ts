@@ -13,6 +13,31 @@ export async function createSession(title?: string) {
 }
 
 /**
+ * 更新会话标题
+ * @param sessionId 会话 ID
+ * @param title 新标题
+ */
+export async function updateSessionTitle(sessionId: string, title: string) {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    throw new Error('会话标题不能为空');
+  }
+
+  const exists = await prisma.chatSession.findUnique({
+    where: { id: sessionId },
+  });
+
+  if (!exists) {
+    throw new Error('未找到该聊天会话，无法重命名');
+  }
+
+  return await prisma.chatSession.update({
+    where: { id: sessionId },
+    data: { title: trimmed },
+  });
+}
+
+/**
  * 删除聊天会话（由于 Prisma 中配置了 onDelete: Cascade，删除 Session 会自动级联删除关联的 Messages）
  * @param sessionId 会话 ID
  */

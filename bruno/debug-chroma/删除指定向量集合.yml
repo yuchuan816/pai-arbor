@@ -1,0 +1,19 @@
+info:
+  name: 删除指定向量集合
+  type: http
+  seq: 4
+
+http:
+  method: DELETE
+  url: http://localhost:3000/api/debug-chroma?name=doc_knowledge_base
+  params:
+    - name: name
+      value: doc_knowledge_base
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -2,7 +2,7 @@ services:
   # 关系型数据库：用于未来 Prisma 存储用户对话历史、Agent 状态
   mysql:
     image: mysql:8
-    container_name: ai_workflow_mysql
+    container_name: pai-arbor-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD}
@@ -10,22 +10,22 @@ services:
     ports:
       - '3306:3306'
     volumes:
-      - ./docker-volumes/mysql_data:/var/lib/mysql
+      - ./docker-volumes/mysql-data:/var/lib/mysql
 
   # 向量数据库：用于 RAG 存储规范文本的向量片段
   chromadb:
     image: chromadb/chroma:latest
-    container_name: ai_workflow_chroma
+    container_name: pai-arbor-chroma
     restart: unless-stopped
     ports:
       - '8000:8000'
     volumes:
-      - ./docker-volumes/chroma_data:/data
+      - ./docker-volumes/chroma-data:/data
 
   # OSS
   minio:
     image: minio/minio:latest
-    container_name: local-minio
+    container_name: pai-arbor-minio
     restart: unless-stopped
     ports:
       - '9000:9000' # API 端口（代码连接这个）
@@ -34,5 +34,5 @@ services:
       MINIO_ROOT_USER:  ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
-      - ./docker-volumes/minio_data:/data
+      - ./docker-volumes/minio-data:/data
     command: server /data --console-address ":9001"

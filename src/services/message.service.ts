@@ -6,6 +6,20 @@ import type { UIDataTypes, UIMessage } from 'ai';
 export const PAGE_SIZE = 10;
 export const CONTEXT_MESSAGE_LIMIT = 5;
 
+function mapMessageRow(row: {
+  id: string;
+  role: string;
+  parts: unknown;
+  createdAt: Date;
+}) {
+  return {
+    id: row.id,
+    role: row.role as UIMessage['role'],
+    parts: row.parts as UIMessage['parts'],
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 export async function getContextMessages(
   sessionId: string,
   limit = CONTEXT_MESSAGE_LIMIT,
@@ -57,13 +71,13 @@ export async function getHistoryPage(
       take: limit,
     });
 
-    const messages = items.reverse();
+    const rows = items.reverse();
     const hasMore =
-      messages.length === limit &&
-      messages.length > 0 &&
-      (await hasOlderMessages(messages[0].createdAt));
+      rows.length === limit &&
+      rows.length > 0 &&
+      (await hasOlderMessages(rows[0].createdAt));
 
-    return { messages, hasMore };
+    return { messages: rows.map(mapMessageRow), hasMore };
   }
 
   const items = await prisma.message.findMany({
@@ -72,13 +86,13 @@ export async function getHistoryPage(
     take: limit,
   });
 
-  const messages = items.reverse();
+  const rows = items.reverse();
   const hasMore =
-    messages.length > 0 &&
-    messages.length === limit &&
-    (await hasOlderMessages(messages[0].createdAt));
+    rows.length > 0 &&
+    rows.length === limit &&
+    (await hasOlderMessages(rows[0].createdAt));
 
-  return { messages, hasMore };
+  return { messages: rows.map(mapMessageRow), hasMore };
 }
 
 /**

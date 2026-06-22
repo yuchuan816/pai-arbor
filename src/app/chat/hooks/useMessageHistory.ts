@@ -1,42 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { UIMessage } from 'ai';
-import type { MessageHistoryPage } from '../types/message-history';
-
-const PAGE_SIZE = 10;
-
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-}
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { fetchHistoryPage } from '@/lib/chat-api';
+import { queryKeys } from '@/lib/query-keys';
+import type { HistoryMessage } from '../types/message-history';
 
 interface UseMessageHistoryOptions {
   activeSessionId: string;
-  messages: UIMessage[];
+  messages: HistoryMessage[];
   setMessages: (
-    messages: UIMessage[] | ((prev: UIMessage[]) => UIMessage[]),
+    messages: HistoryMessage[] | ((prev: HistoryMessage[]) => HistoryMessage[]),
   ) => void;
   bumpScroll: () => void;
-}
-
-async function fetchHistoryPage(
-  sessionId: string,
-  before?: string,
-): Promise<MessageHistoryPage> {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
-  if (before) {
-    params.set('before', before);
-  }
-
-  const res = await fetch(`/api/sessions/${sessionId}?${params.toString()}`);
-  const json = (await res.json()) as ApiResponse<MessageHistoryPage>;
-
-  if (json.success && json.data) {
-    return json.data;
-  }
-
-  return { messages: [], hasMore: false };
 }
 
 export function useMessageHistory({
@@ -46,21 +22,32 @@ export function useMessageHistory({
   bumpScroll,
 }: UseMessageHistoryOptions) {
   const [hasMore, setHasMore] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(false);
   const loadingMoreRef = useRef(false);
+  const initialSyncRef = useRef<string | null>(null);
 
-  const loadMore = useCallback(async () => {
-    if (!activeSessionId || !hasMore || loadingMoreRef.current) return;
+  const { data, isLoading: isInitialLoading } = useQuery({
+    queryKey: queryKeys.messageHistory(activeSessionId),
+    queryFn: () => fetchHistoryPage(activeSessionId),
+    enabled: !!activeSessionId,
+  });
 
-    const oldestId = messages[0]?.id;
-    if (!oldestId) return;
+  useEffect(() => {
+    initialSyncRef.current = null;
+  }, [activeSessionId]);
 
-    loadingMoreRef.current = true;
-    setIsLoadingMore(true);
+  useEffect(() => {
+    if (!data || !activeSessionId) return;
+    if (initialSyncRef.current === activeSessionId) return;
 
-    try {
-      const page = await fetchHistoryPage(activeSessionId, oldestId);
+    initialSyncRef.current = activeSessionId;
+    setMessages(data.messages);
+    setHasMore(data.hasMore);
+    bumpScroll();
+  }, [data, activeSessionId, setMessages, bumpScroll]);
+
+  const { mutateAsync, isPending } = useMutation({
+    mutationFn: (before: string) => fetchHistoryPage(activeSessionId, before),
+    onSuccess: (page) => {
       if (page.messages.length === 0) {
         setHasMore(false);
         return;
@@ -72,50 +59,28 @@ export function useMessageHistory({
         return [...older, ...prev];
       });
       setHasMore(page.hasMore);
-    } catch (error) {
+    },
+    onError: (error) => {
       console.error('加载更多历史消息失败:', error);
-    } finally {
+    },
+    onSettled: () => {
       loadingMoreRef.current = false;
-      setIsLoadingMore(false);
-    }
-  }, [activeSessionId, hasMore, messages, setMessages]);
+    },
+  });
 
-  useEffect(() => {
-    if (!activeSessionId) return;
+  const loadMore = useCallback(async () => {
+    if (!activeSessionId || !hasMore || loadingMoreRef.current) return;
 
-    let cancelled = false;
+    const oldestId = messages[0]?.id;
+    if (!oldestId) return;
 
-    async function loadInitial() {
-      setIsInitialLoading(true);
-      try {
-        const page = await fetchHistoryPage(activeSessionId);
-        if (cancelled) return;
-        setMessages(page.messages);
-        setHasMore(page.hasMore);
-        bumpScroll();
-      } catch (error) {
-        console.error('获取历史消息失败:', error);
-        if (!cancelled) {
-          setMessages([]);
-          setHasMore(false);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsInitialLoading(false);
-        }
-      }
-    }
-
-    void loadInitial();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSessionId, setMessages, bumpScroll]);
+    loadingMoreRef.current = true;
+    await mutateAsync(oldestId);
+  }, [activeSessionId, hasMore, messages, mutateAsync]);
 
   return {
     hasMore,
-    isLoadingMore,
+    isLoadingMore: isPending,
     isInitialLoading,
     loadMore,
   };

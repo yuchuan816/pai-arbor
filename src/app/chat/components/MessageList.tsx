@@ -1,13 +1,17 @@
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import type { UIMessage } from 'ai';
 import { MessageBubble } from './MessageBubble';
 import { AssistantLoadingBubble } from './AssistantLoadingBubble';
+import { Divider } from '@/components/Divider';
 import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
 import { isAtBottom, TOP_THRESHOLD } from '@/utils/scroll';
 import { isAwaitingAssistantResponse, shouldReplaceWithLoadingBubble } from '../utils/message-content';
+import { buildMessageItems } from '../utils/build-message-items';
+import type { HistoryMessage } from '../types/message-history';
+import { cn } from '@/lib/cn';
 
 interface MessageListProps {
-  messages: UIMessage[];
+  messages: HistoryMessage[];
   status: 'ready' | 'submitted' | 'streaming' | 'error';
   scrollToBottomKey: number;
   hasMore?: boolean;
@@ -29,7 +33,8 @@ export function MessageList({
   const loadMoreTriggeredRef = useRef(false);
 
   const lastMessage = messages.at(-1);
-  const awaitingAssistant = isAwaitingAssistantResponse(status, messages);
+  const awaitingAssistant = isAwaitingAssistantResponse(status, messages as UIMessage[]);
+  const messageItems = useMemo(() => buildMessageItems(messages), [messages]);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -100,22 +105,33 @@ export function MessageList({
   }, [isLoadingMore]);
 
   return (
-    <div className="relative flex flex-1 min-h-0">
+    <div className={cn('relative flex flex-1 min-h-0')}>
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4"
+        className={cn('flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4')}
       >
         {isLoadingMore && (
-          <div className="py-2 text-center text-sm text-zinc-400">加载中...</div>
+          <div className={cn('py-2 text-center text-sm text-zinc-400')}>加载中...</div>
         )}
-        {messages.map((message) =>
-          shouldReplaceWithLoadingBubble(message, lastMessage, awaitingAssistant) ? (
-            <AssistantLoadingBubble key={message.id} />
-          ) : (
-            <MessageBubble key={message.id} message={message} />
-          ),
-        )}
+        {messageItems.map((item) => {
+          if (item.type === 'divider') {
+            return <Divider key={item.key} label={item.label} />;
+          }
+
+          const message = item.message;
+          if (
+            shouldReplaceWithLoadingBubble(
+              message as UIMessage,
+              lastMessage as UIMessage | undefined,
+              awaitingAssistant,
+            )
+          ) {
+            return <AssistantLoadingBubble key={message.id} />;
+          }
+
+          return <MessageBubble key={message.id} message={message} />;
+        })}
         {awaitingAssistant && lastMessage?.role === 'user' && <AssistantLoadingBubble />}
       </div>
       <ScrollToBottomButton scrollRef={scrollRef} onScrollToBottom={handleScrollToBottom} />

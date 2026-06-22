@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
 import { MarkdownContent } from '@/components/MarkdownContent';
+import { cn } from '@/lib/cn';
 
 type MessagePart = UIMessage['parts'][number];
 
@@ -14,20 +15,22 @@ export function MessagePartRenderer({ part, index, isUser }: MessagePartRenderer
     return (
       <div
         key={index}
-        className={`mb-2 text-xs italic border-l-2 pl-2 p-2 rounded ${
+        className={cn(
+          'mb-2 rounded border-l-2 p-2 pl-2 text-xs italic',
           isUser
-            ? 'text-blue-100 border-blue-300 bg-blue-500/30'
-            : 'text-zinc-500 border-zinc-400 bg-zinc-300/30'
-        }`}
+            ? 'border-blue-300 bg-blue-500/30 text-blue-100'
+            : 'border-zinc-400 bg-zinc-300/30 text-zinc-500',
+        )}
       >
         <div
-          className={`font-semibold text-[10px] uppercase tracking-wider not-italic mb-1 ${
-            isUser ? 'text-blue-200' : 'text-zinc-400'
-          }`}
+          className={cn(
+            'mb-1 text-[10px] font-semibold uppercase tracking-wider not-italic',
+            isUser ? 'text-blue-200' : 'text-zinc-400',
+          )}
         >
           Thinking Process:
         </div>
-        <span className="whitespace-pre-wrap">{part.text}</span>
+        <span className={cn('whitespace-pre-wrap')}>{part.text}</span>
       </div>
     );
   }
@@ -35,7 +38,7 @@ export function MessagePartRenderer({ part, index, isUser }: MessagePartRenderer
   if (part.type === 'text') {
     if (isUser) {
       return (
-        <span key={index} className="whitespace-pre-wrap">
+        <span key={index} className={cn('whitespace-pre-wrap')}>
           {part.text}
         </span>
       );

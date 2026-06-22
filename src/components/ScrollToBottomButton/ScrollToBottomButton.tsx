@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { isAtBottom } from '@/utils/scroll';
+import { cn } from '@/lib/cn';
 
 interface ScrollToBottomButtonProps {
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -50,10 +51,12 @@ export function ScrollToBottomButton({
     <button
       type="button"
       onClick={handleClick}
-      className="absolute bottom-3 right-3 z-10 flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white border border-zinc-200 shadow-md text-zinc-700 hover:bg-zinc-50"
+      className={cn(
+        'absolute bottom-3 right-3 z-10 flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white border border-zinc-200 shadow-md text-zinc-700 hover:bg-zinc-50',
+      )}
       aria-label="滚动到底部"
     >
-      <ChevronDown className="h-5 w-5" aria-hidden />
+      <ChevronDown className={cn('h-5 w-5')} aria-hidden />
     </button>
   );
 }

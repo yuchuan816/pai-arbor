@@ -1,5 +1,5 @@
 import type { UIMessage } from 'ai';
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/client/cn';
 import { MessagePartRenderer } from './MessagePartRenderer';
 
 interface MessageBubbleProps {

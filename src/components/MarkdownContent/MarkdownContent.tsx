@@ -1,7 +1,7 @@
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/client/cn';
 
 interface MarkdownContentProps {
   content: string;

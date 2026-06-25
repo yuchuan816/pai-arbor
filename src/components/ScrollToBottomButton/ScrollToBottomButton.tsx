@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { isAtBottom } from '@/utils/scroll';
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/client/cn';
 
 interface ScrollToBottomButtonProps {
   scrollRef: RefObject<HTMLDivElement | null>;

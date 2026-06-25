@@ -2,7 +2,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { Modal } from '@/components/Modal';
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/client/cn';
 
 interface ConfirmDialogProps {
   open: boolean;

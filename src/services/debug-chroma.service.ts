@@ -1,6 +1,6 @@
 // app/api/debug-chroma/service.ts
-import { chromaClient } from '@/lib/chroma';
-import { OllamaEmbeddingFunction } from '@/lib/embeddings';
+import { chromaClient } from '@/lib/server/chroma';
+import { OllamaEmbeddingFunction } from '@/lib/server/embeddings';
 
 const defaultCollectionName = 'doc_knowledge_base';
 

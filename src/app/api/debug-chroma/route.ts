@@ -5,7 +5,7 @@ import {
   initTestCollection,
   deleteCollection,
 } from '@/services/debug-chroma.service';
-import { badRequest, successResponse, withApiHandler } from '@/lib/api-handler';
+import { badRequest, successResponse, withApiHandler } from '@/lib/server/api-handler';
 
 /**
  * 【GET】获取数据

@@ -1,6 +1,6 @@
 // services/file.service.ts
-import { prisma } from '@/lib/prisma';
-import { s3Client } from '@/lib/s3';
+import { prisma } from '@/lib/server/prisma';
+import { s3Client } from '@/lib/server/s3';
 import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 function getBucketName(): string {

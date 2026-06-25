@@ -1,5 +1,5 @@
 import { getOrCreateDefaultSession } from '@/services/sessions.service';
-import { withApiHandler, successResponse } from '@/lib/api-handler';
+import { withApiHandler, successResponse } from '@/lib/server/api-handler';
 
 export const GET = withApiHandler(async () => {
   const session = await getOrCreateDefaultSession();

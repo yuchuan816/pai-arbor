@@ -1,4 +1,4 @@
-import { parseApiResponse } from '@/lib/api-client';
+import { parseApiResponse } from '@/lib/client/api-client';
 import type { MessageHistoryPage } from '@/app/chat/types/message-history';
 
 const PAGE_SIZE = 10;

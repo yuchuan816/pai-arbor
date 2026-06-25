@@ -7,7 +7,7 @@ import { useMessageHistory } from '../hooks/useMessageHistory';
 import { ChatHeader } from './ChatHeader';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/client/cn';
 
 export function ChatScreen() {
   const { sessionId, isLoading, error } = useDefaultSession();

@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { streamChatFlow } from '@/services/chat.service';
-import { withApiHandler, badRequest } from '@/lib/api-handler';
+import { withApiHandler, badRequest } from '@/lib/server/api-handler';
 
 export const POST = withApiHandler(async (req: NextRequest) => {
   const { messages, sessionId } = await req.json();

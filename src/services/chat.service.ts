@@ -1,11 +1,10 @@
 import { type UIDataTypes, type UIMessage, streamText, convertToModelMessages } from 'ai';
 import type { InputJsonValue } from '@prisma/client/runtime/client';
-import { ollamaProvider } from '@/lib/ollama.provider';
-import { prisma } from '@/lib/prisma';
-import { VectorService } from '@/services/vector.service';
+import { ollamaProvider } from '@/lib/server/ollama';
+import { prisma } from '@/lib/server/prisma';
+import { buildSystemPrompt } from '@/services/prompt-builder.service';
 import { saveAssistantResponse, getContextMessages } from './message.service';
 
-const vectorService = new VectorService();
 const ollamaModel = process.env.OLLAMA_MODEL ?? '';
 
 if (typeof ollamaModel !== 'string' || ollamaModel.trim() === '') {
@@ -40,33 +39,9 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
 
   const contextMessages = await getContextMessages(sessionId);
 
-  // 从最新的 UIMessage 结构的 parts 中提取纯文本，用于向量检索
+  // 从最新的 UIMessage 结构的 parts 中提取纯文本
   const lastUserContent = lastMessage.parts?.find((p) => p.type === 'text')?.text ?? '';
-
-  //【知识检索】去本地 Chroma 寻找与用户提问语义相近的本地文档
-  let contextDocs: string[] = [];
-  if (lastUserContent) {
-    try {
-      contextDocs = await vectorService.queryKnowledge(lastUserContent);
-    } catch (err) {
-      console.error('[Chroma_Error] 知识库检索失败，系统自动降级运行:', err);
-    }
-  }
-
-  // 组装符合 RAG 规范的 System Prompt
-  const systemPrompt = `你是一个基于本地知识库构建的 AI 助手。
-  请结合以下参考资料回答用户的问题。如果资料中没有相关信息，请拒绝回答，不要胡乱编造。
-  
-  <context>
-  ${contextDocs
-    .map(
-      (doc, index) => `<document id="${index + 1}">
-  ${doc}
-  </document>`,
-    )
-    .join('\n')}
-  </context>
-  `;
+  const systemPrompt = await buildSystemPrompt(sessionId, lastUserContent);
 
   //【调用大模型】启动流式渲染并返回 result 对象
   return streamText({

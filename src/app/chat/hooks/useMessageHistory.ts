@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { fetchHistoryPage } from '@/lib/chat-api';
-import { queryKeys } from '@/lib/query-keys';
+import { fetchHistoryPage } from '@/app/chat/request';
+import { queryKeys } from '@/lib/client/query-keys';
 import type { HistoryMessage } from '../types/message-history';
 
 interface UseMessageHistoryOptions {

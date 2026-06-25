@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { importMarkdownFile } from '@/services/knowledge.service';
-import { badRequest, successResponse, withApiHandler } from '@/lib/api-handler';
+import { badRequest, successResponse, withApiHandler } from '@/lib/server/api-handler';
 
 export const POST = withApiHandler(async (req: NextRequest) => {
   const formData = await req.formData();

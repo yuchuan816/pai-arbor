@@ -1,4 +1,4 @@
-// src/lib/ollama.provider.ts
+// src/lib/ollama-provider.ts
 import { createOllama } from 'ollama-ai-provider-v2';
 
 const getBaseURL = () => {

@@ -8,7 +8,7 @@ import { isAtBottom, TOP_THRESHOLD } from '@/utils/scroll';
 import { isAwaitingAssistantResponse, shouldReplaceWithLoadingBubble } from '../utils/message-content';
 import { buildMessageItems } from '../utils/build-message-items';
 import type { HistoryMessage } from '../types/message-history';
-import { cn } from '@/lib/cn';
+import { cn } from '@/lib/client/cn';
 
 interface MessageListProps {
   messages: HistoryMessage[];

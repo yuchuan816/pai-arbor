@@ -1,5 +1,5 @@
 // 基于 Prisma 的 MySQL 存储服务
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/server/prisma';
 import type { InputJsonValue } from '@prisma/client/runtime/client';
 import type { UIDataTypes, UIMessage } from 'ai';
 

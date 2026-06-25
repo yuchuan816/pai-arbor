@@ -1,6 +1,6 @@
 import { embed } from 'ai';
 import type { EmbeddingFunction } from 'chromadb';
-import { ollamaProvider } from '@/lib/ollama.provider';
+import { ollamaProvider } from '@/lib/server/ollama';
 
 export interface OllamaEmbeddingConfig {
   model: string;

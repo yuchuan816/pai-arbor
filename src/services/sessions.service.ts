@@ -24,3 +24,22 @@ export async function getOrCreateDefaultSession() {
 
   return createSession('pai-arbor');
 }
+
+/**
+ * 将默认会话标记为已完结，供记忆整理 Worker 扫描。
+ * 幂等：已是 completed 时直接返回，不报错。
+ */
+export async function completeDefaultSession() {
+  const session = await getOrCreateDefaultSession();
+
+  if (session.status === 'completed') {
+    return { session, alreadyCompleted: true };
+  }
+
+  const updated = await prisma.chatSession.update({
+    where: { id: session.id },
+    data: { status: 'completed' },
+  });
+
+  return { session: updated, alreadyCompleted: false };
+}

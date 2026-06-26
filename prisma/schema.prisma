@@ -9,24 +9,57 @@ datasource db {
 
 model ChatSession {
   id        String    @id @default(uuid())
+  userId    String    @default("default") @map("user_id")
   title     String    @default("新对话")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  status    String    @default("active") // active | completed
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   messages  Message[]
 
+  @@index([userId, status])
   @@map("chat_sessions")
 }
 
 model Message {
-  id        String      @id @default(uuid())
-  sessionId String
-  role      String
-  parts     Json
-  createdAt DateTime    @default(now())
-  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id                 String      @id @default(uuid())
+  sessionId          String      @map("session_id")
+  role               String
+  parts              Json
+  isConsolidated     Boolean     @default(false) @map("is_consolidated")
+  consolidationJobId String?     @map("consolidation_job_id")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  session            ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+  @@index([sessionId, isConsolidated])
+  @@index([consolidationJobId])
   @@map("messages")
+}
+
+model UserMemory {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  text      String   @db.Text
+  type      String // preference | event | fact
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, isDeleted])
+  @@map("user_memories")
+}
+
+model ConsolidationJob {
+  id          String    @id @default(uuid())
+  status      String    @default("pending") // pending | running | completed | failed
+  progress    String    @default("等待开始...")
+  error       String?   @db.Text
+  result      Json?
+  snapshot    Json? // 任务上下文 + 记忆整理大模型对话 rawPayload
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([startedAt])
+  @@map("consolidation_jobs")
 }
 
 model File {

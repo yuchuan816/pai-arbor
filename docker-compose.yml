@@ -36,3 +36,30 @@ services:
     volumes:
       - ./docker-volumes/minio-data:/data
     command: server /data --console-address ":9001"
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: pai-arbor-loki
+    restart: unless-stopped
+    ports:
+      - '3100:3100'
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./docker/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./docker-volumes/loki-data:/loki
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: pai-arbor-grafana
+    restart: unless-stopped
+    depends_on:
+      - loki
+    ports:
+      - '3001:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - ./docker-volumes/grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro

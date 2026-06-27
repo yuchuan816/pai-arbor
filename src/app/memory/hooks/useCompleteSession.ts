@@ -5,22 +5,20 @@ import {
   completeDefaultSession,
   type CompleteSessionResult,
 } from '@/app/memory/request';
+import { formatClientError, showErrorToast } from '@/lib/client/show-error-toast';
 
 export function useCompleteSession() {
   const [isCompleting, setIsCompleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CompleteSessionResult | null>(null);
 
   const complete = useCallback(async () => {
-    setError(null);
     setIsCompleting(true);
     try {
       const data = await completeDefaultSession();
       setResult(data);
       return data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : '完结失败';
-      setError(message);
+      showErrorToast(formatClientError(err), 'complete-session');
       return null;
     } finally {
       setIsCompleting(false);
@@ -28,7 +26,6 @@ export function useCompleteSession() {
   }, []);
 
   const reset = useCallback(() => {
-    setError(null);
     setResult(null);
   }, []);
 
@@ -36,7 +33,6 @@ export function useCompleteSession() {
     complete,
     reset,
     isCompleting,
-    error,
     result,
   };
 }

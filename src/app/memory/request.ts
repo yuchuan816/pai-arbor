@@ -1,5 +1,5 @@
 import { parseApiResponse } from '@/lib/client/api-client';
-import type { ConsolidationJob } from '@/lib/server/job-store';
+import type { ConsolidationJob } from '@/types/consolidation-job';
 
 export interface CompleteSessionResult {
   sessionId: string;

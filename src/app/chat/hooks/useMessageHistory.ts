@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { fetchHistoryPage } from '@/app/chat/request';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { clearSessionMessages, fetchHistoryPage } from '@/app/chat/request';
 import { queryKeys } from '@/lib/client/query-keys';
 import type { HistoryMessage } from '../types/message-history';
 
@@ -21,6 +21,7 @@ export function useMessageHistory({
   setMessages,
   bumpScroll,
 }: UseMessageHistoryOptions) {
+  const queryClient = useQueryClient();
   const [hasMore, setHasMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const initialSyncRef = useRef<string | null>(null);
@@ -60,9 +61,6 @@ export function useMessageHistory({
       });
       setHasMore(page.hasMore);
     },
-    onError: (error) => {
-      console.error('加载更多历史消息失败:', error);
-    },
     onSettled: () => {
       loadingMoreRef.current = false;
     },
@@ -78,10 +76,29 @@ export function useMessageHistory({
     await mutateAsync(oldestId);
   }, [activeSessionId, hasMore, messages, mutateAsync]);
 
+  const { mutateAsync: clearHistoryAsync, isPending: isClearing } = useMutation({
+    mutationFn: () => clearSessionMessages(activeSessionId),
+    onSuccess: () => {
+      setMessages([]);
+      setHasMore(false);
+      queryClient.setQueryData(queryKeys.messageHistory(activeSessionId), {
+        messages: [],
+        hasMore: false,
+      });
+    },
+  });
+
+  const clearHistory = useCallback(async () => {
+    if (!activeSessionId) return;
+    await clearHistoryAsync();
+  }, [activeSessionId, clearHistoryAsync]);
+
   return {
     hasMore,
     isLoadingMore: isPending,
     isInitialLoading,
+    isClearing,
     loadMore,
+    clearHistory,
   };
 }

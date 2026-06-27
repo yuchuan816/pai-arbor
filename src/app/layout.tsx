@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { QueryProvider } from '@/components/QueryProvider';
+import { ToastProvider } from '@/components/ToastProvider';
 import { cn } from '@/lib/client/cn';
 import './globals.css';
 
@@ -38,6 +39,7 @@ export default function RootLayout({
     >
       <body className={cn('min-h-full flex flex-col')}>
         <QueryProvider>{children}</QueryProvider>
+        <ToastProvider />
       </body>
     </html>
   );

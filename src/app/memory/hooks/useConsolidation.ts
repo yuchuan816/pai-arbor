@@ -1,20 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchJobStatus, startConsolidation } from '@/app/memory/request';
 import { queryKeys } from '@/lib/client/query-keys';
+import { formatClientError, showErrorToast } from '@/lib/client/show-error-toast';
 
 export function useConsolidation() {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const failedToastJobIdRef = useRef<string | null>(null);
 
   const { data: job, isFetching } = useQuery({
     queryKey: jobId ? queryKeys.memoryJob(jobId) : ['memory', 'job', 'idle'],
     queryFn: () => fetchJobStatus(jobId!),
     enabled: Boolean(jobId),
+    meta: { showErrorToast: false },
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === 'running' || status === 'pending' ? 2000 : false;
@@ -27,14 +29,21 @@ export function useConsolidation() {
     }
   }, [job?.status, queryClient]);
 
+  useEffect(() => {
+    if (job?.status === 'failed' && job.error && job.id !== failedToastJobIdRef.current) {
+      failedToastJobIdRef.current = job.id;
+      showErrorToast(job.error, 'consolidation-job-failed');
+    }
+  }, [job?.status, job?.error, job?.id]);
+
   const start = useCallback(async () => {
-    setStartError(null);
     setIsStarting(true);
     try {
       const { jobId: newJobId } = await startConsolidation();
       setJobId(newJobId);
+      failedToastJobIdRef.current = null;
     } catch (err) {
-      setStartError(err instanceof Error ? err.message : '启动失败');
+      showErrorToast(formatClientError(err), 'consolidation-start');
     } finally {
       setIsStarting(false);
     }
@@ -42,7 +51,7 @@ export function useConsolidation() {
 
   const reset = useCallback(() => {
     setJobId(null);
-    setStartError(null);
+    failedToastJobIdRef.current = null;
   }, []);
 
   const isRunning = job?.status === 'pending' || job?.status === 'running';
@@ -52,7 +61,6 @@ export function useConsolidation() {
     jobId,
     start,
     reset,
-    startError,
     isStarting,
     isRunning,
     isPolling: Boolean(jobId) && isFetching,

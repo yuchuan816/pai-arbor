@@ -4,7 +4,9 @@ import type { InputJsonValue } from '@prisma/client/runtime/client';
 import type { UIDataTypes, UIMessage } from 'ai';
 
 export const PAGE_SIZE = 10;
-export const CONTEXT_MESSAGE_LIMIT = 5;
+export const CONTEXT_MESSAGE_LIMIT = 10;
+
+const activeMessageFilter = { isDeleted: false };
 
 function mapMessageRow(row: {
   id: string;
@@ -25,7 +27,7 @@ export async function getContextMessages(
   limit = CONTEXT_MESSAGE_LIMIT,
 ): Promise<UIMessage[]> {
   const items = await prisma.message.findMany({
-    where: { sessionId },
+    where: { sessionId, ...activeMessageFilter },
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
@@ -47,6 +49,7 @@ export async function getHistoryPage(
     const count = await prisma.message.count({
       where: {
         sessionId,
+        ...activeMessageFilter,
         createdAt: { lt: oldestCreatedAt },
       },
     });
@@ -55,7 +58,7 @@ export async function getHistoryPage(
 
   if (options.before) {
     const cursor = await prisma.message.findFirst({
-      where: { id: options.before, sessionId },
+      where: { id: options.before, sessionId, ...activeMessageFilter },
     });
 
     if (!cursor) {
@@ -65,6 +68,7 @@ export async function getHistoryPage(
     const items = await prisma.message.findMany({
       where: {
         sessionId,
+        ...activeMessageFilter,
         createdAt: { lt: cursor.createdAt },
       },
       orderBy: { createdAt: 'desc' },
@@ -81,7 +85,7 @@ export async function getHistoryPage(
   }
 
   const items = await prisma.message.findMany({
-    where: { sessionId },
+    where: { sessionId, ...activeMessageFilter },
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
@@ -93,6 +97,13 @@ export async function getHistoryPage(
     (await hasOlderMessages(rows[0].createdAt));
 
   return { messages: rows.map(mapMessageRow), hasMore };
+}
+
+export async function softDeleteSessionMessages(sessionId: string) {
+  return prisma.message.updateMany({
+    where: { sessionId, ...activeMessageFilter },
+    data: { isDeleted: true },
+  });
 }
 
 /**

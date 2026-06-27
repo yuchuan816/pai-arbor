@@ -2,15 +2,14 @@ import { type UIDataTypes, type UIMessage, streamText, convertToModelMessages } 
 import type { InputJsonValue } from '@prisma/client/runtime/client';
 import { ollamaProvider } from '@/lib/server/ollama';
 import { prisma } from '@/lib/server/prisma';
+import { logger } from '@/lib/server/logger';
 import { buildSystemPrompt } from '@/services/prompt-builder.service';
 import { saveAssistantResponse, getContextMessages } from './message.service';
 
 const ollamaModel = process.env.OLLAMA_MODEL ?? '';
 
 if (typeof ollamaModel !== 'string' || ollamaModel.trim() === '') {
-  throw new Error(
-    '❌ [Env Error]: 请检查环境变量 ollamaModel 是否正确注入。',
-  );
+  throw new Error('❌ [Env Error]: 请检查环境变量 ollamaModel 是否正确注入。');
 }
 
 /**
@@ -43,6 +42,15 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
   const lastUserContent = lastMessage.parts?.find((p) => p.type === 'text')?.text ?? '';
   const systemPrompt = await buildSystemPrompt(sessionId, lastUserContent);
 
+  logger.info({
+    event: 'llm.chat',
+    sessionId,
+    model: ollamaModel,
+    system: systemPrompt,
+    userContent: lastUserContent,
+    contextMessageCount: contextMessages.length,
+  });
+
   //【调用大模型】启动流式渲染并返回 result 对象
   return streamText({
     model: ollamaProvider(ollamaModel),
@@ -50,7 +58,7 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
     messages: await convertToModelMessages(contextMessages),
 
     // 流结束后的生命周期钩子：当大模型吐完最后一个字时，组装标准的 parts 写入数据库
-    onFinish: async ({ text, reasoningText}) => {
+    onFinish: async ({ text, reasoningText }) => {
       try {
         // 构造符合 AI SDK 5.0 规范的 Assistant Parts 数组
         const assistantParts: UIDataTypes[] = [];
@@ -71,8 +79,14 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
 
         // 保存 AI 消息并更新 Session 的最后活跃时间
         saveAssistantResponse(sessionId, assistantParts);
+        logger.debug({
+          event: 'llm.chat.finish',
+          sessionId,
+          textLength: text.length,
+          hasReasoning: Boolean(reasoningText),
+        });
       } catch (dbErr) {
-        console.error('[MySQL_Error] 写入 AI 历史对白或更新会话失败:', dbErr);
+        logger.error({ event: 'llm.chat.finish', sessionId, err: dbErr }, '写入 AI 历史对白失败');
       }
     },
   });

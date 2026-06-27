@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { logger } from '@/lib/server/logger';
 
 type RouteHandler = (req: NextRequest, context: any) => Promise<Response> | Response;
 
@@ -11,7 +12,10 @@ export function withApiHandler(handler: RouteHandler): RouteHandler {
       return response;
     } catch (error: unknown) {
       // 统一错误日志记录
-      console.error(`[API_ERROR_INTERCEPTED] [${req.method}] ${req.nextUrl.pathname}:`, error);
+      logger.error(
+        { method: req.method, path: req.nextUrl.pathname, err: error },
+        '[API_ERROR_INTERCEPTED]',
+      );
 
       const errorMessage = error instanceof Error ? error.message : '服务器内部异常';
 

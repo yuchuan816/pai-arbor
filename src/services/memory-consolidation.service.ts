@@ -1,45 +1,69 @@
-import { generateText } from 'ai';
+import { generateText, Output } from 'ai';
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import { prisma } from '@/lib/server/prisma';
-import { ollamaProvider } from '@/lib/server/ollama';
+import { getStructuredOllamaModel } from '@/lib/server/ollama';
+import { logger } from '@/lib/server/logger';
 import { VectorService } from '@/services/vector.service';
-import { jobStore, type ConsolidationJob, type ExtractedMemory } from '@/lib/server/job-store';
+import { updateConsolidationJob } from '@/services/consolidation-job.service';
+import type { ConsolidationJob, ExtractedMemory } from '@/types/consolidation-job';
 
 const vectorService = new VectorService();
 const ollamaModel = process.env.OLLAMA_MODEL ?? '';
 const SESSION_STATUS_COMPLETED = 'completed';
 const DEFAULT_USER_ID = 'default';
 
-const MEMORY_EXTRACTION_PROMPT = `你是一个高度专业、冷酷理性的记忆提炼专家。你的唯一任务是分析用户与 AI 助理（名叫阿尔博）之间的对话，将已聊完的话题提炼为长期记忆，并精准标注每条消息的处理状态。
+const MEMORY_EXTRACTION_PROMPT = `
+你是一个高度专业、冷酷理性的记忆提炼专家。你的唯一任务是分析用户与 AI 助理（名叫阿尔博）之间的对话，将已聊完的话题提炼为长期记忆，并精准标注每条消息的处理状态。
 
 【输入格式】
-对话由若干 <message id="消息UUID">角色: 内容</message> 标签组成。你必须严格使用标签上的 id 属性，不得编造或修改任何 id。
+对话由若干 <message id="消息UUID" seq="序号">角色: 内容</message> 标签组成。
+- id：消息的唯一标识，回填时必须原样使用，不得编造。
+- seq：从 0 开始的顺序序号，与对话时间顺序一致；仅作阅读辅助，回填仍以 id 为准。
 
 【核心提取准则】
 1. 提取有持久价值的信息，放入 finished_memories：
-   - preference（偏好）：用户的兴趣、喜好、厌恶。
-   - event（事件）：已经发生或计划发生的重大日程、关键生活动态。
-   - fact（事实）：用户的硬性基本资料、职业、长期状态。
+  - preference（偏好）：用户的兴趣、喜好、厌恶。
+  - event（事件）：已经发生或计划发生的重大日程、关键生活动态。
+  - fact（事实）：用户的硬性基本资料、职业、长期状态。
 
-2. 严格过滤垃圾信息：
-   - 必须过滤日常寒暄、无意义口水话或纯知识问答。
-   - 提取的 text 必须是语义完整的、以"用户"为主语的简短陈述句，严禁使用"我"、"你"等代词。
+2. 记忆 text 规范：
+  - 不得把日常寒暄、口水话、纯应答（如「好的」「嗯嗯」）单独写成记忆；这类消息的 id 可列入所属话题块的 source_message_ids，但不得单独占一条 finished_memory。
+  - text 必须是语义完整的、以"用户"为主语的简短陈述句，严禁使用"我"、"你"等代词。
+  - 同一话题块内多轮来回的信息，应合并提炼为一条 text（必要时可用分号连接多个要点），禁止拆成多条。
 
-3. 【话题完整性控制 — 最重要】
-   - 只有已经交待完整、用户已转移话题的内容，才能提炼为 finished_memories。
-   - 每条 finished_memory 必须通过 source_message_ids 列出支撑该事实的原始消息 id（可多条）。
-   - 如果对话末尾有话题聊到一半信息不全（例如用户说"我下周要去北京，但是..."后对话结束），严禁提炼该话题，必须将这些聊到一半的消息 id 放入 unfinished_message_ids。
-   - unfinished_message_ids 中的消息不得出现在任何 finished_memory 的 source_message_ids 中。
+3. 【粒度控制】
+  - 基本单位是「话题块」，不是「单条消息」也不是「单轮问答」。用户与阿尔博就同一主题连续聊的多轮（哪怕来回 6 条、10 条消息），只要中间没有切换到别的话题，通常只产出 1 条 finished_memory。
+  - 严禁：用户每说一句话、或每一轮「用户一句 + 阿尔博一句」就生成一条记忆。这是最常见的错误，必须避免。
+  - 若同一话题块内有多条可持久化的事实，合并进同一条 finished_memory 的 text，不要拆成数组里多条。
+  - 只有用户明确换题（或时间/场景明显切换）才算新话题块。
 
-【输出格式控制】
-- 必须且只能输出一个合法的 JSON 对象（不是数组），严格包含 finished_memories 和 unfinished_message_ids 两个字段。
-- 拒绝任何 Markdown 代码块包裹，拒绝任何多余的开头语或结束语。
-- 如果没有任何已完结话题可提炼，finished_memories 为空数组 []，未完结的消息 id 放入 unfinished_message_ids。
+4. 【按时间顺序与 A-B-A 分段】
+  - finished_memories 必须严格按照对话时间顺序排列（先发生的条目在前）。
+  - 同一话题若在对话中先聊完、中间聊了别的话题、之后又回到该话题（话题 A → 话题 B → 话题 A），才拆成多条 finished_memory 分别总结；允许对同一主题重复总结，禁止把 B 的 id 混入 A。
+  - 每条 finished_memory 只对应一个连续、未跨话题的消息片段；source_message_ids 应覆盖该片段内全部相关消息（含片段内寒暄），不得包含其他话题块的消息 id。
 
-【示例输出】
-{"finished_memories":[{"text":"用户对花生过敏","type":"fact","source_message_ids":["msg-uuid-1","msg-uuid-2"]}],"unfinished_message_ids":["msg-uuid-5","msg-uuid-6"]}
+5. 【话题完整性控制】
+  - 只有已经交待完整、用户已转移话题的内容，才能进入 finished_memories。
+  - 对话末尾话题聊到一半、信息不全时，严禁提炼，必须将相关消息 id 放入 unfinished_message_ids。
+  - unfinished_message_ids 中的 id 不得出现在任何 finished_memory 的 source_message_ids 中。
+  - 若无任何已完结、有持久价值的话题，finished_memories 应为 []。
 
-现在，请开始分析以下被 <conversation> 标签包裹的对话内容：`;
+现在，请开始分析以下被 <conversation> 标签包裹的对话内容：
+`;
+
+const consolidationOutputSchema = z.object({
+  finished_memories: z.array(
+    z.object({
+      text: z.string(),
+      type: z.enum(['preference', 'event', 'fact']),
+      source_message_ids: z.array(z.string()),
+    }),
+  ),
+  unfinished_message_ids: z.array(z.string()),
+});
+
+type ConsolidationOutput = z.infer<typeof consolidationOutputSchema>;
 
 type MemoryType = ExtractedMemory['type'];
 
@@ -75,11 +99,6 @@ interface ValidatedConsolidation {
   unfinishedIds: string[];
 }
 
-function stripMarkdownFences(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  return fenced ? fenced[1].trim() : text.trim();
-}
-
 function isMemoryType(value: string): value is MemoryType {
   return VALID_MEMORY_TYPES.has(value as MemoryType);
 }
@@ -104,36 +123,25 @@ function parseFinishedMemoryItem(item: unknown): FinishedMemory | null {
   return { text, type, sourceMessageIds };
 }
 
-function parseConsolidationOutput(output: string): ConsolidationParseResult | null {
-  const normalized = stripMarkdownFences(output);
-  const jsonStart = normalized.indexOf('{');
-  const jsonEnd = normalized.lastIndexOf('}');
-  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) return null;
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(normalized.slice(jsonStart, jsonEnd + 1));
-  } catch (err) {
-    console.warn('[MemoryConsolidation] 模型输出 JSON 解析失败:', err);
-    return null;
-  }
-
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
-
-  const record = raw as Record<string, unknown>;
-  const rawFinished = Array.isArray(record.finished_memories) ? record.finished_memories : [];
-  const finishedMemories = rawFinished
+function mapConsolidationOutput(raw: ConsolidationOutput): ConsolidationParseResult {
+  const finishedMemories = raw.finished_memories
     .map(parseFinishedMemoryItem)
     .filter((item): item is FinishedMemory => item !== null);
-  const unfinishedMessageIds = parseStringArray(record.unfinished_message_ids);
+  const unfinishedMessageIds = parseStringArray(raw.unfinished_message_ids);
 
   return { finishedMemories, unfinishedMessageIds };
 }
 
+/**
+ * 校验模型输出，并对每条 finished_memory 做下标区间填充）
+ * messageIds 为 buildTranscript 一次查库后按 createdAt 正序的 id 列表，下标即时间序。
+ */
 function validateAndMergeIds(
   parsed: ConsolidationParseResult,
-  allowedIds: Set<string>,
+  messageIds: string[],
 ): ValidatedConsolidation {
+  const allowedIds = new Set(messageIds);
+  const idToIndex = new Map(messageIds.map((id, index) => [id, index]));
   const unfinishedIds = parsed.unfinishedMessageIds.filter((id) => allowedIds.has(id));
   const unfinishedSet = new Set(unfinishedIds);
 
@@ -144,7 +152,10 @@ function validateAndMergeIds(
     const hasInvalidId = validSourceIds.length !== memory.sourceMessageIds.length;
 
     if (hasInvalidId) {
-      console.warn('[MemoryConsolidation] 丢弃含非法 source_message_ids 的记忆:', memory.text);
+      logger.warn(
+        { memoryText: memory.text },
+        '[MemoryConsolidation] 丢弃含非法 source_message_ids 的记忆',
+      );
       continue;
     }
 
@@ -154,12 +165,23 @@ function validateAndMergeIds(
   }
 
   const consolidatedIdSet = new Set<string>();
+
   for (const memory of finishedMemories) {
-    for (const id of memory.sourceMessageIds) {
+    const indices = memory.sourceMessageIds
+      .map((id) => idToIndex.get(id))
+      .filter((index): index is number => index !== undefined);
+
+    if (indices.length === 0) continue;
+
+    const minIndex = Math.min(...indices);
+    const maxIndex = Math.max(...indices);
+
+    for (let i = minIndex; i <= maxIndex; i++) {
+      const id = messageIds[i];
       if (unfinishedSet.has(id)) {
-        console.warn(
-          '[MemoryConsolidation] 消息 id 同时出现在 finished 与 unfinished，保留 unfinished:',
-          id,
+        logger.warn(
+          { messageId: id, memoryText: memory.text },
+          '[MemoryConsolidation] 区间填充跳过 unfinished 消息',
         );
         continue;
       }
@@ -174,7 +196,7 @@ function validateAndMergeIds(
   };
 }
 
-function formatMessageXml(id: string, role: string, parts: unknown): string | null {
+function formatMessageXml(id: string, seq: number, role: string, parts: unknown): string | null {
   const messageParts = parts as { type: string; text?: string }[];
   const text = messageParts
     .filter((part) => part.type === 'text' && part.text)
@@ -185,11 +207,11 @@ function formatMessageXml(id: string, role: string, parts: unknown): string | nu
   if (!text) return null;
 
   const label = role === 'user' ? '用户' : '阿尔博';
-  return `<message id="${id}">${label}: ${text}</message>`;
+  return `<message id="${id}" seq="${seq}">${label}: ${text}</message>`;
 }
 
 /**
- * 捞取所有未整理、且所属会话已完结的消息，按时间正序构建带 id 的 XML transcript。
+ * 捞取所有未整理、且所属会话已完结的消息，按时间正序构建带 id + seq 的 XML transcript。
  */
 async function buildTranscript(): Promise<TranscriptResult | null> {
   const messages = await prisma.message.findMany({
@@ -211,9 +233,12 @@ async function buildTranscript(): Promise<TranscriptResult | null> {
   const messageIds = messages.map((message) => message.id);
   const userId = messages[0]?.session.userId ?? DEFAULT_USER_ID;
 
-  const lines = messages
-    .map((message) => formatMessageXml(message.id, message.role, message.parts))
-    .filter(Boolean);
+  const lines: string[] = [];
+  for (let seq = 0; seq < messages.length; seq++) {
+    const message = messages[seq];
+    const line = formatMessageXml(message.id, seq, message.role, message.parts);
+    if (line) lines.push(line);
+  }
 
   return {
     transcript: lines.join('\n'),
@@ -235,8 +260,37 @@ function toJobMemories(memories: FinishedMemory[]): ExtractedMemory[] {
   return memories.map(({ text, type }) => ({ text, type }));
 }
 
+type ConsolidationResult = NonNullable<ConsolidationJob['result']>;
+
+/** 构造空的整理结果（无可提取记忆、无已标记消息）。 */
+function emptyResult(unfinishedMessageCount = 0): ConsolidationResult {
+  return {
+    memoriesExtracted: 0,
+    memories: [],
+    consolidatedMessageCount: 0,
+    unfinishedMessageCount,
+  };
+}
+
+/** 将 job 标记为已完成并写入进度与结果。 */
+function completeJob(
+  job: ConsolidationJob,
+  progress: string,
+  result: ConsolidationResult,
+  snapshot?: ConsolidationJob['snapshot'],
+): Promise<void> {
+  return updateConsolidationJob(job.id, {
+    status: 'completed',
+    completedAt: Date.now(),
+    progress,
+    result,
+    ...(snapshot !== undefined ? { snapshot } : {}),
+  });
+}
+
+/** 将 job 标记为失败并记录错误信息。 */
 function failJob(job: ConsolidationJob, errorMessage: string): Promise<void> {
-  return jobStore.update(job.id, {
+  return updateConsolidationJob(job.id, {
     status: 'failed',
     completedAt: Date.now(),
     progress: '记忆整理失败，可稍后重试。',
@@ -244,163 +298,179 @@ function failJob(job: ConsolidationJob, errorMessage: string): Promise<void> {
   });
 }
 
+/** 调用模型从 transcript 提取记忆，LLM 上下文写入 Loki，job snapshot 仅保留 messageIds/userId。 */
+async function extractMemoriesFromTranscript(
+  job: ConsolidationJob,
+  transcript: string,
+  messageIds: string[],
+  userId: string,
+): Promise<{ parsed: ConsolidationParseResult } | { error: string }> {
+  await updateConsolidationJob(job.id, {
+    progress: `正在调用模型提取记忆（${messageIds.length} 条消息）...`,
+    snapshot: { messageIds, userId },
+  });
+
+  const userPrompt = `<conversation>\n${transcript}\n</conversation>`;
+
+  logger.info({
+    event: 'llm.consolidation.request',
+    jobId: job.id,
+    model: ollamaModel,
+    system: MEMORY_EXTRACTION_PROMPT,
+    prompt: userPrompt,
+    messageCount: messageIds.length,
+  });
+
+  try {
+    const { output, text } = await generateText({
+      model: getStructuredOllamaModel(ollamaModel),
+      output: Output.object({ schema: consolidationOutputSchema }),
+      system: MEMORY_EXTRACTION_PROMPT,
+      prompt: userPrompt,
+      maxRetries: 2,
+    });
+
+    await updateConsolidationJob(job.id, {
+      progress: '正在解析模型输出...',
+    });
+
+    logger.info({
+      event: 'llm.consolidation.response',
+      jobId: job.id,
+      model: ollamaModel,
+      response: text,
+      output,
+    });
+
+    if (!output) {
+      return { error: '模型输出格式无效，无法解析' };
+    }
+
+    return { parsed: mapConsolidationOutput(output) };
+  } catch (err) {
+    logger.warn({ event: 'llm.consolidation.failed', jobId: job.id, err }, '结构化输出生成失败');
+    return { error: '模型输出格式无效，无法解析' };
+  }
+}
+
+/** 将记忆写入 MySQL 与向量库，并标记对应消息为已整理。 */
+async function persistConsolidation(
+  job: ConsolidationJob,
+  finishedMemories: FinishedMemory[],
+  consolidatedIds: string[],
+  userId: string,
+): Promise<void> {
+  const memoryRecords = buildMemoryRecords(finishedMemories, userId);
+  const timestamp = Date.now();
+
+  await updateConsolidationJob(job.id, { progress: `正在存储 ${memoryRecords.length} 条记忆...` });
+
+  await prisma.$transaction([
+    prisma.message.updateMany({
+      where: { id: { in: consolidatedIds } },
+      data: {
+        isConsolidated: true,
+        consolidationJobId: job.id,
+      },
+    }),
+    prisma.userMemory.createMany({
+      data: memoryRecords.map((record) => ({
+        id: record.id,
+        userId: record.userId,
+        text: record.text,
+        type: record.type,
+      })),
+    }),
+  ]);
+
+  await vectorService.addMemories(
+    memoryRecords.map((record) => ({
+      id: record.id,
+      text: record.text,
+      timestamp,
+      type: record.type,
+    })),
+  );
+}
+
 /**
- * Main consolidation runner — called fire-and-forget from the API route.
+ * 记忆整理主流程，由 API 路由以 fire-and-forget 方式调用。
  */
 export async function runConsolidation(job: ConsolidationJob): Promise<void> {
-  await jobStore.update(job.id, { status: 'running', progress: '正在读取未整理的已完结话题...' });
+  await updateConsolidationJob(job.id, {
+    status: 'running',
+    progress: '正在读取未整理的已完结话题...',
+  });
 
   try {
     const transcriptResult = await buildTranscript();
 
     if (!transcriptResult) {
-      await jobStore.update(job.id, {
-        status: 'completed',
-        completedAt: Date.now(),
-        progress: '没有可整理的已完结话题消息。',
-        result: {
-          memoriesExtracted: 0,
-          memories: [],
-          consolidatedMessageCount: 0,
-          unfinishedMessageCount: 0,
-        },
-      });
+      await completeJob(job, '没有可整理的已完结话题消息。', emptyResult());
       return;
     }
 
     const { transcript, messageIds, userId } = transcriptResult;
 
     if (!transcript) {
-      await jobStore.update(job.id, {
-        status: 'completed',
-        completedAt: Date.now(),
-        progress: `${messageIds.length} 条消息无有效文本，未做任何标记。`,
-        snapshot: { messageIds, userId },
-        result: {
-          memoriesExtracted: 0,
-          memories: [],
-          consolidatedMessageCount: 0,
-          unfinishedMessageCount: 0,
-        },
-      });
+      await completeJob(
+        job,
+        `${messageIds.length} 条消息无有效文本，未做任何标记。`,
+        emptyResult(),
+        { messageIds, userId },
+      );
       return;
     }
 
-    await jobStore.update(job.id, {
-      progress: `正在调用模型提取记忆（${messageIds.length} 条消息）...`,
-      snapshot: { messageIds, userId },
-    });
-
-    const userPrompt = `<conversation>\n${transcript}\n</conversation>`;
-
-    const { text } = await generateText({
-      model: ollamaProvider(ollamaModel),
-      system: MEMORY_EXTRACTION_PROMPT,
-      prompt: userPrompt,
-    });
-
-    await jobStore.update(job.id, {
-      progress: '正在解析模型输出...',
-      snapshot: {
-        messageIds,
-        userId,
-        rawPayload: {
-          model: ollamaModel,
-          system: MEMORY_EXTRACTION_PROMPT,
-          prompt: userPrompt,
-          response: text,
-        },
-      },
-    });
-
-    const parsed = parseConsolidationOutput(text);
-    if (!parsed) {
-      await failJob(job, '模型输出格式无效，无法解析');
+    const extracted = await extractMemoriesFromTranscript(job, transcript, messageIds, userId);
+    if ('error' in extracted) {
+      await failJob(job, extracted.error);
       return;
     }
 
-    const allowedIds = new Set(messageIds);
     const { finishedMemories, consolidatedIds, unfinishedIds } = validateAndMergeIds(
-      parsed,
-      allowedIds,
+      extracted.parsed,
+      messageIds,
     );
 
     if (finishedMemories.length === 0) {
-      await jobStore.update(job.id, {
-        status: 'completed',
-        completedAt: Date.now(),
-        progress: `未提取到已完结记忆，${unfinishedIds.length} 条消息留待下次。`,
-        result: {
-          memoriesExtracted: 0,
-          memories: [],
-          consolidatedMessageCount: 0,
-          unfinishedMessageCount: unfinishedIds.length,
-        },
-      });
+      await completeJob(
+        job,
+        `未提取到已完结记忆，${unfinishedIds.length} 条消息留待下次。`,
+        emptyResult(unfinishedIds.length),
+      );
       return;
     }
 
     if (consolidatedIds.length === 0) {
-      await jobStore.update(job.id, {
-        status: 'completed',
-        completedAt: Date.now(),
-        progress: `提取到 ${finishedMemories.length} 条记忆但无有效消息可标记，${unfinishedIds.length} 条留待下次。`,
-        result: {
+      await completeJob(
+        job,
+        `提取到 ${finishedMemories.length} 条记忆但无有效消息可标记，${unfinishedIds.length} 条留待下次。`,
+        {
           memoriesExtracted: finishedMemories.length,
           memories: toJobMemories(finishedMemories),
           consolidatedMessageCount: 0,
           unfinishedMessageCount: unfinishedIds.length,
         },
-      });
+      );
       return;
     }
 
-    const memoryRecords = buildMemoryRecords(finishedMemories, userId);
-    const timestamp = Date.now();
+    await persistConsolidation(job, finishedMemories, consolidatedIds, userId);
 
-    await jobStore.update(job.id, { progress: `正在存储 ${memoryRecords.length} 条记忆...` });
-
-    await prisma.$transaction([
-      prisma.message.updateMany({
-        where: { id: { in: consolidatedIds } },
-        data: {
-          isConsolidated: true,
-          consolidationJobId: job.id,
-        },
-      }),
-      prisma.userMemory.createMany({
-        data: memoryRecords.map((record) => ({
-          id: record.id,
-          userId: record.userId,
-          text: record.text,
-          type: record.type,
-        })),
-      }),
-    ]);
-
-    await vectorService.addMemories(
-      memoryRecords.map((record) => ({
-        id: record.id,
-        text: record.text,
-        timestamp,
-        type: record.type,
-      })),
-    );
-
-    await jobStore.update(job.id, {
-      status: 'completed',
-      completedAt: Date.now(),
-      progress: `完成！提取 ${finishedMemories.length} 条记忆，标记 ${consolidatedIds.length} 条消息已整理，${unfinishedIds.length} 条消息留待下次。`,
-      result: {
+    await completeJob(
+      job,
+      `完成！提取 ${finishedMemories.length} 条记忆，标记 ${consolidatedIds.length} 条消息已整理，${unfinishedIds.length} 条消息留待下次。`,
+      {
         memoriesExtracted: finishedMemories.length,
         memories: toJobMemories(finishedMemories),
         consolidatedMessageCount: consolidatedIds.length,
         unfinishedMessageCount: unfinishedIds.length,
       },
-    });
+    );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : '未知错误';
-    console.error('[MemoryConsolidation] 记忆整理失败:', err);
+    logger.error({ err }, '[MemoryConsolidation] 记忆整理失败');
     await failJob(job, errorMessage);
   }
 }

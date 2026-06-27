@@ -5,7 +5,7 @@ import { cn } from '@/lib/client/cn';
 import { useConsolidation } from '@/app/memory/hooks/useConsolidation';
 import { useCompleteSession } from '@/app/memory/hooks/useCompleteSession';
 import { useMemoryList } from '@/app/memory/hooks/useMemoryList';
-import type { JobStatus } from '@/lib/server/job-store';
+import type { JobStatus } from '@/types/consolidation-job';
 
 const STATUS_LABELS: Record<JobStatus, string> = {
   pending: '等待中',
@@ -28,14 +28,9 @@ const TYPE_LABELS = {
 } as const;
 
 export function MemoryDashboard() {
-  const { job, start, reset, startError, isStarting, isRunning } = useConsolidation();
-  const {
-    complete,
-    isCompleting,
-    error: completeError,
-    result: completeResult,
-  } = useCompleteSession();
-  const { memories, isLoading, error, refetch } = useMemoryList();
+  const { job, start, reset, isStarting, isRunning } = useConsolidation();
+  const { complete, isCompleting, result: completeResult } = useCompleteSession();
+  const { memories, isLoading, refetch } = useMemoryList();
 
   const handleStart = async () => {
     await start();
@@ -79,11 +74,7 @@ export function MemoryDashboard() {
               </button>
             </div>
 
-            {completeError && (
-              <p className={cn('text-sm text-red-600')}>{completeError}</p>
-            )}
-
-            {completeResult && !completeError && (
+            {completeResult && (
               <p className={cn('text-sm text-emerald-700')}>
                 {completeResult.alreadyCompleted
                   ? '当前话题已是完结状态'
@@ -123,10 +114,6 @@ export function MemoryDashboard() {
                 </button>
               )}
             </div>
-
-            {startError && (
-              <p className={cn('text-sm text-red-600')}>{startError}</p>
-            )}
           </section>
 
           {job && (
@@ -150,12 +137,6 @@ export function MemoryDashboard() {
                 <p className={cn('mb-4 text-sm text-zinc-500')}>
                   已整理消息 {job.result.consolidatedMessageCount} 条，留待下次{' '}
                   {job.result.unfinishedMessageCount} 条
-                </p>
-              )}
-
-              {job.error && (
-                <p className={cn('mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700')}>
-                  {job.error}
                 </p>
               )}
 
@@ -199,8 +180,7 @@ export function MemoryDashboard() {
             </div>
 
             {isLoading && <p className={cn('text-sm text-zinc-500')}>加载中...</p>}
-            {error && <p className={cn('text-sm text-red-600')}>{error}</p>}
-            {!isLoading && !error && memories.length === 0 && (
+            {!isLoading && memories.length === 0 && (
               <p className={cn('text-sm text-zinc-500')}>暂无记忆记录。</p>
             )}
 

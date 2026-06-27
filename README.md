@@ -11,6 +11,7 @@
 | 关系数据库 | MySQL 8 + Prisma 7 |
 | 向量数据库 | ChromaDB |
 | 对象存储 | MinIO（S3 兼容） |
+| 日志 | Loki + Grafana（pino 推送） |
 | 模型服务 | Ollama（对话 + Embedding） |
 
 ## 前置依赖
@@ -54,6 +55,26 @@ docker compose up -d
 | MySQL | 3306 | 会话、消息、文件元数据 |
 | ChromaDB | 8000 | 向量检索 |
 | MinIO | 9000（API）/ 9001（控制台） | 文件存储 |
+| Loki | 3100 | 日志接收 API（无 Web UI，应用往这里推送） |
+| Grafana | 3001 | 日志查询界面（admin / admin） |
+
+#### 日志与调试
+
+应用通过 [pino](https://getpino.io/) 输出结构化日志，LLM 调用（聊天 system prompt、记忆整理输入输出）写入 Loki。
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `LOG_LEVEL` | 日志级别 | `debug` |
+| `LOKI_URL` | Loki 推送地址 | `http://localhost:3100` |
+| `LOG_TO_LOKI` | 是否推送到 Loki | `true` |
+
+- Grafana：[http://localhost:3001](http://localhost:3001) → Explore → 数据源 Loki
+- 查看聊天 system prompt：`{app="pai-arbor"} | json | event="llm.chat"`
+- 查看记忆整理：`{app="pai-arbor"} | json | event=~"llm.consolidation.*"`
+- 按 job 过滤：`{app="pai-arbor"} | json | jobId="<uuid>"`
+- 设 `LOG_TO_LOKI=false` 时不记录日志（终端也不会有输出）
+
+`consolidation_jobs.snapshot` 仅保留 `messageIds` / `userId`；完整 LLM 输入输出在 Loki 中查询。
 
 ### 4. 初始化数据库
 
@@ -104,6 +125,9 @@ pnpm dev
 | `MINIO_ENDPOINT` | MinIO 地址 | `http://localhost:9000` |
 | `OLLAMA_HOST` | Ollama 服务地址 | `127.0.0.1:11434` |
 | `OLLAMA_MODEL` | 对话模型名称 | `gemma4:26b` |
+| `LOG_LEVEL` | 日志级别 | `debug` |
+| `LOKI_URL` | Loki 地址 | `http://localhost:3100` |
+| `LOG_TO_LOKI` | 是否推送 Loki | `true` |
 
 ## 开发说明
 

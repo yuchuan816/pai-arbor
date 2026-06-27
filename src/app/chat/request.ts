@@ -28,3 +28,10 @@ export async function fetchHistoryPage(
     return { messages: [], hasMore: false };
   }
 }
+
+export async function clearSessionMessages(sessionId: string): Promise<void> {
+  const res = await fetch(`/api/sessions/${sessionId}/messages`, {
+    method: 'DELETE',
+  });
+  await parseApiResponse<{ count: number }>(res);
+}

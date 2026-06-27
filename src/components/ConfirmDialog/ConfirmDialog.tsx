@@ -29,7 +29,6 @@ export function ConfirmDialog({
     <Modal
       open={open}
       onClose={onCancel}
-      className={cn('z-60')}
       panelClassName={cn(
         'fixed left-1/2 top-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2',
         'rounded-lg bg-white p-5 shadow-xl focus:outline-none',

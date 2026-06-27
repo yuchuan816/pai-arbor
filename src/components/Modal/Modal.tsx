@@ -38,7 +38,7 @@ export function Modal({
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
-          className={cn(panelClassName)}
+          className={cn(className, panelClassName)}
         >
           {children}
         </Dialog.Content>

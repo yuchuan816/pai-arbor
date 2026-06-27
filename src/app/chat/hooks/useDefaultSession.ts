@@ -5,7 +5,7 @@ import { fetchDefaultSession } from '@/app/chat/request';
 import { queryKeys } from '@/lib/client/query-keys';
 
 export function useDefaultSession() {
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: queryKeys.defaultSession,
     queryFn: fetchDefaultSession,
   });
@@ -13,6 +13,6 @@ export function useDefaultSession() {
   return {
     sessionId: data?.id ?? '',
     isLoading,
-    error: isError ? (error?.message ?? '无法加载会话') : null,
+    isError,
   };
 }

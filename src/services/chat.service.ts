@@ -27,43 +27,43 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
     throw new Error('最后一条消息必须是用户消息');
   }
 
-  // 持久化用户消息：直接将前端完整的 parts 数组写入数据库 Json 字段
-  await prisma.message.create({
+  const userMessage = await prisma.message.create({
     data: {
       sessionId,
       role: lastMessage.role,
       parts: lastMessage.parts as InputJsonValue,
     },
   });
+  const userMessageId = userMessage.id;
 
   const contextMessages = await getContextMessages(sessionId);
 
-  // 从最新的 UIMessage 结构的 parts 中提取纯文本
   const lastUserContent = lastMessage.parts?.find((p) => p.type === 'text')?.text ?? '';
-  const systemPrompt = await buildSystemPrompt(sessionId, lastUserContent);
+  const { systemPrompt, meta } = await buildSystemPrompt(sessionId, lastUserContent);
 
   logger.info({
-    event: 'llm.chat',
+    event: 'llm.chat.request',
     sessionId,
     model: ollamaModel,
-    system: systemPrompt,
+    userMessageId,
     userContent: lastUserContent,
     contextMessageCount: contextMessages.length,
+    activeSkill: meta.activeSkill,
+    memoryFragments: meta.memoryFragments,
+    userProfile: meta.userProfile,
   });
 
-  //【调用大模型】启动流式渲染并返回 result 对象
+  const startedAt = Date.now();
+
   return streamText({
     model: ollamaProvider(ollamaModel),
     system: systemPrompt,
     messages: await convertToModelMessages(contextMessages),
 
-    // 流结束后的生命周期钩子：当大模型吐完最后一个字时，组装标准的 parts 写入数据库
-    onFinish: async ({ text, reasoningText }) => {
+    onFinish: async ({ text, reasoningText, usage }) => {
       try {
-        // 构造符合 AI SDK 5.0 规范的 Assistant Parts 数组
         const assistantParts: UIDataTypes[] = [];
 
-        // 若存在 DeepSeek 的思考内容，以标准 reasoning 类型节点推入数组
         if (reasoningText) {
           assistantParts.push({
             type: 'reasoning',
@@ -71,22 +71,32 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
           });
         }
 
-        // 推入标准的 text 类型节点
         assistantParts.push({
           type: 'text',
           text: text,
         });
 
-        // 保存 AI 消息并更新 Session 的最后活跃时间
-        saveAssistantResponse(sessionId, assistantParts);
-        logger.debug({
-          event: 'llm.chat.finish',
+        const { messageId: assistantMessageId } = await saveAssistantResponse(
           sessionId,
-          textLength: text.length,
-          hasReasoning: Boolean(reasoningText),
+          assistantParts,
+        );
+
+        logger.info({
+          event: 'llm.chat.response',
+          sessionId,
+          model: ollamaModel,
+          userMessageId,
+          assistantMessageId,
+          text,
+          ...(reasoningText ? { reasoningText } : {}),
+          durationMs: Date.now() - startedAt,
+          ...(usage ? { usage } : {}),
         });
       } catch (dbErr) {
-        logger.error({ event: 'llm.chat.finish', sessionId, err: dbErr }, '写入 AI 历史对白失败');
+        logger.error(
+          { event: 'llm.chat.response', sessionId, userMessageId, err: dbErr },
+          '写入 AI 历史对白失败',
+        );
       }
     },
   });

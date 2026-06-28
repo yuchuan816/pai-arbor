@@ -1,6 +1,6 @@
 import { format, isToday, isYesterday, isSameYear } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import type { HistoryMessage } from '../types/message-history';
+import type { HistoryMessage } from '../request';
 
 export function getMessageDate(message: HistoryMessage): Date {
   if (message.createdAt) {

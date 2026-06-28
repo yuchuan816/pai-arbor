@@ -1,3 +1,6 @@
+x-timezone: &timezone
+  TZ: Asia/Shanghai
+
 services:
   # 关系型数据库：用于未来 Prisma 存储用户对话历史、Agent 状态
   mysql:
@@ -5,6 +8,7 @@ services:
     container_name: pai-arbor-mysql
     restart: unless-stopped
     environment:
+      <<: *timezone
       MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD}
       MYSQL_DATABASE: ${DATABASE_NAME}
     ports:
@@ -17,6 +21,8 @@ services:
     image: chromadb/chroma:latest
     container_name: pai-arbor-chroma
     restart: unless-stopped
+    environment:
+      <<: *timezone
     ports:
       - '8000:8000'
     volumes:
@@ -31,25 +37,28 @@ services:
       - '9000:9000' # API 端口（代码连接这个）
       - '9001:9001' # Web 管理后台端口
     environment:
-      MINIO_ROOT_USER:  ${MINIO_ACCESS_KEY}
+      <<: *timezone
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
       - ./docker-volumes/minio-data:/data
     command: server /data --console-address ":9001"
 
   loki:
-    image: grafana/loki:3.0.0
+    image: grafana/loki:latest
     container_name: pai-arbor-loki
     restart: unless-stopped
+    environment:
+      <<: *timezone
     ports:
       - '3100:3100'
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
-      - ./docker/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./docker/loki-config.yml:/etc/loki/loki-config.yml:ro
       - ./docker-volumes/loki-data:/loki
 
   grafana:
-    image: grafana/grafana:11.3.0
+    image: grafana/grafana:latest
     container_name: pai-arbor-grafana
     restart: unless-stopped
     depends_on:
@@ -57,9 +66,10 @@ services:
     ports:
       - '3001:3000'
     environment:
+      <<: *timezone
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: 'false'
     volumes:
       - ./docker-volumes/grafana-data:/var/lib/grafana
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana-loki-datasource.yml:/etc/grafana/provisioning/datasources/loki.yml:ro

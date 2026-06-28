@@ -13,7 +13,8 @@ const ollamaModel = process.env.OLLAMA_MODEL ?? '';
 const SESSION_STATUS_COMPLETED = 'completed';
 const DEFAULT_USER_ID = 'default';
 
-const MEMORY_EXTRACTION_PROMPT = `
+/** 长期保留：输入格式、类型定义、分段与完整性等核心规则 */
+const MEMORY_EXTRACTION_PROMPT_CORE = `
 你是一个高度专业、冷酷理性的记忆提炼专家。你的唯一任务是分析用户与 AI 助理（名叫阿尔博）之间的对话，将已聊完的话题提炼为长期记忆，并精准标注每条消息的处理状态。
 
 【输入格式】
@@ -30,27 +31,41 @@ const MEMORY_EXTRACTION_PROMPT = `
 2. 记忆 text 规范：
   - 不得把日常寒暄、口水话、纯应答（如「好的」「嗯嗯」）单独写成记忆；这类消息的 id 可列入所属话题块的 source_message_ids，但不得单独占一条 finished_memory。
   - text 必须是语义完整的、以"用户"为主语的简短陈述句，严禁使用"我"、"你"等代词。
+  - text 提炼用户侧持久事实；阿尔博的收尾回复不必写进 text，但必须写进 source_message_ids。
   - 同一话题块内多轮来回的信息，应合并提炼为一条 text（必要时可用分号连接多个要点），禁止拆成多条。
 
-3. 【粒度控制】
-  - 基本单位是「话题块」，不是「单条消息」也不是「单轮问答」。用户与阿尔博就同一主题连续聊的多轮（哪怕来回 6 条、10 条消息），只要中间没有切换到别的话题，通常只产出 1 条 finished_memory。
-  - 严禁：用户每说一句话、或每一轮「用户一句 + 阿尔博一句」就生成一条记忆。这是最常见的错误，必须避免。
-  - 若同一话题块内有多条可持久化的事实，合并进同一条 finished_memory 的 text，不要拆成数组里多条。
-  - 只有用户明确换题（或时间/场景明显切换）才算新话题块。
-
-4. 【按时间顺序与 A-B-A 分段】
+3. 【按时间顺序与 A-B-A 分段】
   - finished_memories 必须严格按照对话时间顺序排列（先发生的条目在前）。
   - 同一话题若在对话中先聊完、中间聊了别的话题、之后又回到该话题（话题 A → 话题 B → 话题 A），才拆成多条 finished_memory 分别总结；允许对同一主题重复总结，禁止把 B 的 id 混入 A。
   - 每条 finished_memory 只对应一个连续、未跨话题的消息片段；source_message_ids 应覆盖该片段内全部相关消息（含片段内寒暄），不得包含其他话题块的消息 id。
+  - 每个话题块的 source_message_ids 必须包含该块内每一轮消息的 id（用户与阿尔博），从该块第一条到最后一条，不得跳过中间任意一条。
+  - 必须包含该话题块最后一条阿尔博的回复（收尾、确认、告别等），即使该内容不写进 text。
+  - 回填自检：该话题块内所有消息的 seq 应落在该条 source_message_ids 对应 seq 的 min–max 闭区间内。
 
-5. 【话题完整性控制】
+4. 【话题完整性控制】
   - 只有已经交待完整、用户已转移话题的内容，才能进入 finished_memories。
-  - 对话末尾话题聊到一半、信息不全时，严禁提炼，必须将相关消息 id 放入 unfinished_message_ids。
-  - unfinished_message_ids 中的 id 不得出现在任何 finished_memory 的 source_message_ids 中。
+  - 对话末尾话题聊到一半、信息不全时，严禁提炼，不得将其 id 放入任何 finished_memory 的 source_message_ids。
   - 若无任何已完结、有持久价值的话题，finished_memories 应为 []。
 
 现在，请开始分析以下被 <conversation> 标签包裹的对话内容：
 `;
+
+/**
+ * 弱本地模型专用约束。升级云端模型后删除本常量，并改为：
+ * const MEMORY_EXTRACTION_PROMPT = MEMORY_EXTRACTION_PROMPT_CORE;
+ */
+const MEMORY_EXTRACTION_PROMPT_LOCAL_MODEL_GUARDRAILS = `
+【弱模型额外约束】
+- 禁止将话题切换、结束、无实质信息的元描述（如「用户结束了一个话题」）单独写成 finished_memory；若无 preference/event/fact 级持久价值，不要为该块产出记忆。
+- 同一会话内连续、同类的轻松话题（如连续讲笑话）应合并为一条 finished_memory，禁止每个小片段各写一条。
+- text 必须以「用户」为主语；阿尔博的行为仅作背景，用分号附在用户陈述之后，不得让 text 以阿尔博为主语。
+- 若整段对话仅有寒暄、笑话等且无持久价值，finished_memories 应为 []。
+`;
+
+const MEMORY_EXTRACTION_PROMPT = [
+  MEMORY_EXTRACTION_PROMPT_CORE,
+  MEMORY_EXTRACTION_PROMPT_LOCAL_MODEL_GUARDRAILS,
+].join('\n');
 
 const consolidationOutputSchema = z.object({
   finished_memories: z.array(
@@ -60,7 +75,6 @@ const consolidationOutputSchema = z.object({
       source_message_ids: z.array(z.string()),
     }),
   ),
-  unfinished_message_ids: z.array(z.string()),
 });
 
 type ConsolidationOutput = z.infer<typeof consolidationOutputSchema>;
@@ -77,7 +91,6 @@ interface FinishedMemory {
 
 interface ConsolidationParseResult {
   finishedMemories: FinishedMemory[];
-  unfinishedMessageIds: string[];
 }
 
 interface TranscriptResult {
@@ -96,7 +109,7 @@ interface MemoryRecord {
 interface ValidatedConsolidation {
   finishedMemories: FinishedMemory[];
   consolidatedIds: string[];
-  unfinishedIds: string[];
+  deferredIds: string[];
 }
 
 function isMemoryType(value: string): value is MemoryType {
@@ -127,14 +140,14 @@ function mapConsolidationOutput(raw: ConsolidationOutput): ConsolidationParseRes
   const finishedMemories = raw.finished_memories
     .map(parseFinishedMemoryItem)
     .filter((item): item is FinishedMemory => item !== null);
-  const unfinishedMessageIds = parseStringArray(raw.unfinished_message_ids);
 
-  return { finishedMemories, unfinishedMessageIds };
+  return { finishedMemories };
 }
 
 /**
- * 校验模型输出，并对每条 finished_memory 做下标区间填充）
- * messageIds 为 buildTranscript 一次查库后按 createdAt 正序的 id 列表，下标即时间序。
+ * 校验模型输出，并按 globalMax 前缀标记 consolidated：
+ * globalMax = 时间顺序最后一条 finished_memory 的 source 最大下标；
+ * consolidatedIds = messageIds[0..globalMax]。
  */
 function validateAndMergeIds(
   parsed: ConsolidationParseResult,
@@ -142,8 +155,6 @@ function validateAndMergeIds(
 ): ValidatedConsolidation {
   const allowedIds = new Set(messageIds);
   const idToIndex = new Map(messageIds.map((id, index) => [id, index]));
-  const unfinishedIds = parsed.unfinishedMessageIds.filter((id) => allowedIds.has(id));
-  const unfinishedSet = new Set(unfinishedIds);
 
   const finishedMemories: FinishedMemory[] = [];
 
@@ -164,35 +175,45 @@ function validateAndMergeIds(
     finishedMemories.push({ ...memory, sourceMessageIds: validSourceIds });
   }
 
-  const consolidatedIdSet = new Set<string>();
-
-  for (const memory of finishedMemories) {
-    const indices = memory.sourceMessageIds
-      .map((id) => idToIndex.get(id))
-      .filter((index): index is number => index !== undefined);
-
-    if (indices.length === 0) continue;
-
-    const minIndex = Math.min(...indices);
-    const maxIndex = Math.max(...indices);
-
-    for (let i = minIndex; i <= maxIndex; i++) {
-      const id = messageIds[i];
-      if (unfinishedSet.has(id)) {
-        logger.warn(
-          { messageId: id, memoryText: memory.text },
-          '[MemoryConsolidation] 区间填充跳过 unfinished 消息',
-        );
-        continue;
-      }
-      consolidatedIdSet.add(id);
-    }
+  if (finishedMemories.length === 0) {
+    return {
+      finishedMemories,
+      consolidatedIds: [],
+      deferredIds: [...messageIds],
+    };
   }
+
+  const lastMemory = finishedMemories[finishedMemories.length - 1];
+  const indices = lastMemory.sourceMessageIds
+    .map((id) => idToIndex.get(id))
+    .filter((index): index is number => index !== undefined);
+
+  if (indices.length === 0) {
+    return {
+      finishedMemories,
+      consolidatedIds: [],
+      deferredIds: [...messageIds],
+    };
+  }
+
+  const globalMax = Math.max(...indices);
+  const consolidatedIds = messageIds.slice(0, globalMax + 1);
+  const deferredIds = messageIds.slice(globalMax + 1);
+
+  logger.info(
+    {
+      event: 'llm.consolidation.mark',
+      globalMax,
+      consolidatedCount: consolidatedIds.length,
+      deferredCount: deferredIds.length,
+    },
+    '[MemoryConsolidation] globalMax 前缀标记',
+  );
 
   return {
     finishedMemories,
-    consolidatedIds: [...consolidatedIdSet],
-    unfinishedIds,
+    consolidatedIds,
+    deferredIds,
   };
 }
 
@@ -263,12 +284,12 @@ function toJobMemories(memories: FinishedMemory[]): ExtractedMemory[] {
 type ConsolidationResult = NonNullable<ConsolidationJob['result']>;
 
 /** 构造空的整理结果（无可提取记忆、无已标记消息）。 */
-function emptyResult(unfinishedMessageCount = 0): ConsolidationResult {
+function emptyResult(deferredMessageCount = 0): ConsolidationResult {
   return {
     memoriesExtracted: 0,
     memories: [],
     consolidatedMessageCount: 0,
-    unfinishedMessageCount,
+    unfinishedMessageCount: deferredMessageCount,
   };
 }
 
@@ -316,9 +337,10 @@ async function extractMemoriesFromTranscript(
     event: 'llm.consolidation.request',
     jobId: job.id,
     model: ollamaModel,
-    system: MEMORY_EXTRACTION_PROMPT,
-    prompt: userPrompt,
+    messageIds,
     messageCount: messageIds.length,
+    transcript,
+    promptId: 'memory-extraction',
   });
 
   try {
@@ -338,6 +360,7 @@ async function extractMemoriesFromTranscript(
       event: 'llm.consolidation.response',
       jobId: job.id,
       model: ollamaModel,
+      messageIds,
       response: text,
       output,
     });
@@ -428,7 +451,7 @@ export async function runConsolidation(job: ConsolidationJob): Promise<void> {
       return;
     }
 
-    const { finishedMemories, consolidatedIds, unfinishedIds } = validateAndMergeIds(
+    const { finishedMemories, consolidatedIds, deferredIds } = validateAndMergeIds(
       extracted.parsed,
       messageIds,
     );
@@ -436,8 +459,8 @@ export async function runConsolidation(job: ConsolidationJob): Promise<void> {
     if (finishedMemories.length === 0) {
       await completeJob(
         job,
-        `未提取到已完结记忆，${unfinishedIds.length} 条消息留待下次。`,
-        emptyResult(unfinishedIds.length),
+        `未提取到已完结记忆，${deferredIds.length} 条消息留待下次。`,
+        emptyResult(deferredIds.length),
       );
       return;
     }
@@ -445,12 +468,12 @@ export async function runConsolidation(job: ConsolidationJob): Promise<void> {
     if (consolidatedIds.length === 0) {
       await completeJob(
         job,
-        `提取到 ${finishedMemories.length} 条记忆但无有效消息可标记，${unfinishedIds.length} 条留待下次。`,
+        `提取到 ${finishedMemories.length} 条记忆但无有效消息可标记，${deferredIds.length} 条留待下次。`,
         {
           memoriesExtracted: finishedMemories.length,
           memories: toJobMemories(finishedMemories),
           consolidatedMessageCount: 0,
-          unfinishedMessageCount: unfinishedIds.length,
+          unfinishedMessageCount: deferredIds.length,
         },
       );
       return;
@@ -458,15 +481,26 @@ export async function runConsolidation(job: ConsolidationJob): Promise<void> {
 
     await persistConsolidation(job, finishedMemories, consolidatedIds, userId);
 
+    const result = {
+      memoriesExtracted: finishedMemories.length,
+      memories: toJobMemories(finishedMemories),
+      consolidatedMessageCount: consolidatedIds.length,
+      unfinishedMessageCount: deferredIds.length,
+    };
+
+    logger.info({
+      event: 'llm.consolidation.complete',
+      jobId: job.id,
+      memoriesExtracted: result.memoriesExtracted,
+      consolidatedMessageCount: result.consolidatedMessageCount,
+      unfinishedMessageCount: result.unfinishedMessageCount,
+      memories: result.memories,
+    });
+
     await completeJob(
       job,
-      `完成！提取 ${finishedMemories.length} 条记忆，标记 ${consolidatedIds.length} 条消息已整理，${unfinishedIds.length} 条消息留待下次。`,
-      {
-        memoriesExtracted: finishedMemories.length,
-        memories: toJobMemories(finishedMemories),
-        consolidatedMessageCount: consolidatedIds.length,
-        unfinishedMessageCount: unfinishedIds.length,
-      },
+      `完成！提取 ${finishedMemories.length} 条记忆，标记 ${consolidatedIds.length} 条消息已整理，${deferredIds.length} 条消息留待下次。`,
+      result,
     );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : '未知错误';

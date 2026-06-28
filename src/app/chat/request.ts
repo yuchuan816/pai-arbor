@@ -1,7 +1,16 @@
+import type { UIMessage } from 'ai';
 import { parseApiResponse } from '@/lib/client/api-client';
-import type { MessageHistoryPage } from '@/app/chat/types/message-history';
 
 const PAGE_SIZE = 10;
+
+export interface HistoryMessage extends UIMessage {
+  createdAt?: string;
+}
+
+export interface MessageHistoryPage {
+  messages: HistoryMessage[];
+  hasMore: boolean;
+}
 
 interface DefaultSession {
   id: string;

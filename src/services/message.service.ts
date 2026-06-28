@@ -110,7 +110,7 @@ export async function softDeleteSessionMessages(sessionId: string) {
  * 保存助手回复并更新会话时间（内部事务控制）
  */
 export async function saveAssistantResponse(sessionId: string, parts: UIDataTypes[]) {
-  return await prisma.$transaction([
+  const [message] = await prisma.$transaction([
     prisma.message.create({
       data: {
         sessionId,
@@ -123,4 +123,6 @@ export async function saveAssistantResponse(sessionId: string, parts: UIDataType
       data: { updatedAt: new Date() },
     }),
   ]);
+
+  return { messageId: message.id };
 }

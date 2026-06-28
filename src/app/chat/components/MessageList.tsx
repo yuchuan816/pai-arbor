@@ -7,7 +7,7 @@ import { ScrollToBottomButton } from '@/components/ScrollToBottomButton';
 import { isAtBottom, TOP_THRESHOLD } from '@/utils/scroll';
 import { isAwaitingAssistantResponse, shouldReplaceWithLoadingBubble } from '../utils/message-content';
 import { buildMessageItems } from '../utils/build-message-items';
-import type { HistoryMessage } from '../types/message-history';
+import type { HistoryMessage } from '../request';
 import { cn } from '@/lib/client/cn';
 
 interface MessageListProps {

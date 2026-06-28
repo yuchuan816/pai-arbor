@@ -14,7 +14,10 @@ export function useConsolidation() {
 
   const { data: job, isFetching } = useQuery({
     queryKey: jobId ? queryKeys.memoryJob(jobId) : ['memory', 'job', 'idle'],
-    queryFn: () => fetchJobStatus(jobId!),
+    queryFn: () => {
+      if (!jobId) throw new Error('jobId is required');
+      return fetchJobStatus(jobId);
+    },
     enabled: Boolean(jobId),
     meta: { showErrorToast: false },
     refetchInterval: (query) => {

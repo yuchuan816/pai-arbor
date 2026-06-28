@@ -60,7 +60,7 @@ docker compose up -d
 
 #### 日志与调试
 
-应用通过 [pino](https://getpino.io/) 输出结构化日志，LLM 调用（聊天 system prompt、记忆整理输入输出）写入 Loki。
+应用通过 [pino](https://getpino.io/) 输出结构化日志，LLM 请求/回复、记忆片段等动态上下文写入 Loki（不记录固定 system 提示词全文）。
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
@@ -68,13 +68,18 @@ docker compose up -d
 | `LOKI_URL` | Loki 推送地址 | `http://localhost:3100` |
 | `LOG_TO_LOKI` | 是否推送到 Loki | `true` |
 
-- Grafana：[http://localhost:3001](http://localhost:3001) → Explore → 数据源 Loki
-- 查看聊天 system prompt：`{app="pai-arbor"} | json | event="llm.chat"`
-- 查看记忆整理：`{app="pai-arbor"} | json | event=~"llm.consolidation.*"`
+- Grafana：[http://localhost:3001](http://localhost:3001) → Explore → 数据源 Loki（Label filters 可选 `event`）
+- 重启应用后新日志带 `event` label；
+- 聊天请求（记忆片段等）：`{app="pai-arbor", event="llm.chat.request"}`
+- 聊天回复：`{app="pai-arbor", event="llm.chat.response"}`
+- 按消息过滤：`{app="pai-arbor"} | json | userMessageId="<uuid>"` 或 `assistantMessageId`
+- 记忆整理：`{app="pai-arbor", event=~"llm.consolidation.*"}`
+- 整理结果摘要：`{app="pai-arbor", event="llm.consolidation.complete"}`
+- globalMax 前缀标记：`{app="pai-arbor", event="llm.consolidation.mark"}`
 - 按 job 过滤：`{app="pai-arbor"} | json | jobId="<uuid>"`
 - 设 `LOG_TO_LOKI=false` 时不记录日志（终端也不会有输出）
 
-`consolidation_jobs.snapshot` 仅保留 `messageIds` / `userId`；完整 LLM 输入输出在 Loki 中查询。
+`consolidation_jobs.snapshot` 仅保留 `messageIds` / `userId`；LLM 输入输出在 Loki 中查询。
 
 ### 4. 初始化数据库
 

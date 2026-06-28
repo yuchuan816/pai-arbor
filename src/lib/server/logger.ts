@@ -14,6 +14,7 @@ function buildLogger(): pino.Logger {
     options: {
       host: lokiHost,
       labels: { app: 'pai-arbor' },
+      propsToLabels: ['event'],
       batching: { interval: 5 },
     },
     level,
@@ -25,11 +26,13 @@ function buildLogger(): pino.Logger {
 export const logger = buildLogger();
 
 export type LlmLogEvent =
-  | 'llm.chat'
-  | 'llm.chat.finish'
+  | 'llm.chat.request'
+  | 'llm.chat.response'
   | 'llm.consolidation.request'
   | 'llm.consolidation.response'
-  | 'llm.consolidation.failed';
+  | 'llm.consolidation.complete'
+  | 'llm.consolidation.failed'
+  | 'llm.consolidation.mark';
 
 export function logLlmEvent(event: LlmLogEvent, fields: Record<string, unknown>): void {
   logger.info({ event, ...fields });

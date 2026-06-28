@@ -55,8 +55,8 @@ const eslintConfig = defineConfig([
       // 禁止在普通对象中使用无意义的重复 Key 值
       'no-dupe-keys': 'error',
 
-      // 限制单行代码的最大复杂度（可选提示）
-      complexity: ['warn', { max: 10 }],
+      // 限制单行代码的最大复杂度
+      // complexity: ['warn', { max: 15 }],
     },
   },
 

@@ -1,5 +1,7 @@
 import { createFileRecord, deleteFileRecord } from '@/services/file.service';
 import { VectorService } from '@/services/vector.service';
+import { AppError } from '@/lib/server/app-error';
+import { randomUUID } from 'crypto';
 import { MarkdownTextSplitter } from '@langchain/textsplitters';
 
 const vectorService = new VectorService();
@@ -8,7 +10,7 @@ const vectorService = new VectorService();
  * 编排完整的知识库文件导入业务流（包含强一致性逆向事务补偿）
  */
 export async function importMarkdownFile(file: File) {
-  const fileId = crypto.randomUUID();
+  const fileId = randomUUID();
 
   // 读取并解析文本
   const arrayBuffer = await file.arrayBuffer();
@@ -23,7 +25,7 @@ export async function importMarkdownFile(file: File) {
   const textChunks = await splitter.splitText(rawText);
 
   if (textChunks.length === 0) {
-    throw new Error('未能从文件中切分出任何有效内容');
+    throw AppError.badRequest('未能从文件中切分出任何有效内容');
   }
 
   // 写入 MySQL 记录
@@ -60,6 +62,6 @@ export async function importMarkdownFile(file: File) {
     }
 
     const errorMsg = vectorError instanceof Error ? vectorError.message : 'ChromaDB 同步超时';
-    throw new Error(`知识库向量化失败: ${errorMsg}，已自动回滚多端实体。`);
+    throw AppError.internal(`知识库向量化失败: ${errorMsg}，已自动回滚多端实体。`);
   }
 }

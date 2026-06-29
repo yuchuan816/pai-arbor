@@ -1,8 +1,6 @@
 // app/api/debug-chroma/service.ts
-import { chromaClient } from '@/lib/server/chroma';
-import { OllamaEmbeddingFunction } from '@/lib/server/embeddings';
-
-const defaultCollectionName = 'doc_knowledge_base';
+import { randomUUID } from 'crypto';
+import { chromaClient, getOllamaEmbeddingFunction } from '@/lib/server/chroma';
 
 export async function listAllCollections() {
   const collections = await chromaClient.listCollections();
@@ -16,8 +14,11 @@ export async function listAllCollections() {
   };
 }
 
-export async function getCollectionInfo(name: string, limit: number) {
-  const collection = await chromaClient.getCollection({ name });
+export async function getCollectionInfo(collectionName: string, limit: number) {
+  const collection = await chromaClient.getCollection({
+    name: collectionName,
+    embeddingFunction: getOllamaEmbeddingFunction(),
+  });
   const count = await collection.count();
   const preview = await collection.get({
     limit,
@@ -34,26 +35,43 @@ export async function getCollectionInfo(name: string, limit: number) {
   };
 }
 
-export async function initTestCollection() {
-  const qwenEf = new OllamaEmbeddingFunction({ model: 'nomic-embed-text' });
-
+export async function insertTestData(collectionName: string, dataArray: string[]) {
   const collection = await chromaClient.getOrCreateCollection({
-    name: defaultCollectionName,
-    embeddingFunction: qwenEf,
+    name: collectionName,
+    embeddingFunction: getOllamaEmbeddingFunction(),
   });
 
-  await collection.upsert({
-    ids: ['test_id_1', 'test_id_2'],
-    documents: ['这是一条测试用的知识库文档数据。', 'Ollama 联动 Chroma 部署成功。'],
-    metadatas: [{ source: 'debug' }, { source: 'debug' }],
+  const ids: string[] = [];
+  const documents: string[] = [];
+  const metadatas: Record<string, string>[] = [];
+
+  dataArray.forEach((item) => {
+    ids.push(randomUUID());
+    documents.push(item);
+    metadatas.push({ source: 'debug' }); // 默认 metadata
+  });
+
+  await collection.add({
+    ids,
+    documents,
+    metadatas,
   });
 
   return {
-    message: `集合 ${defaultCollectionName} 初始化成功，已写入两条测试数据。`,
+    message: `成功向集合 ${collectionName} 插入了 ${ids.length} 条数据。`,
+    insertedIds: ids,
   };
 }
+export async function deleteCollection(collectionName: string) {
+  await chromaClient.deleteCollection({ name: collectionName });
+  return { message: `集合 ${collectionName} 已彻底删除` };
+}
 
-export async function deleteCollection(name: string) {
-  await chromaClient.deleteCollection({ name });
-  return { message: `集合 ${name} 已彻底删除` };
+export async function resetCollection(collectionName: string) {
+  await chromaClient.deleteCollection({ name: collectionName });
+  await chromaClient.createCollection({
+    name: collectionName,
+    embeddingFunction: getOllamaEmbeddingFunction(),
+  });
+  return { message: `集合 ${collectionName} 已清空` };
 }

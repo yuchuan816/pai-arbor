@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { AppError } from '@/lib/server/app-error';
 import { logger } from '@/lib/server/logger';
 
 type RouteHandler = (req: NextRequest, context: any) => Promise<Response> | Response;
@@ -6,12 +7,27 @@ type RouteHandler = (req: NextRequest, context: any) => Promise<Response> | Resp
 export function withApiHandler(handler: RouteHandler): RouteHandler {
   return async (req: NextRequest, context: any) => {
     try {
-      // 执行原路由逻辑
       const response = await handler(req, context);
 
       return response;
     } catch (error: unknown) {
-      // 统一错误日志记录
+      if (error instanceof AppError) {
+        const logPayload = {
+          method: req.method,
+          path: req.nextUrl.pathname,
+          status: error.status,
+          err: error,
+        };
+
+        if (error.status < 500) {
+          logger.warn(logPayload, '[API_ERROR_INTERCEPTED]');
+        } else {
+          logger.error(logPayload, '[API_ERROR_INTERCEPTED]');
+        }
+
+        return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+      }
+
       logger.error(
         { method: req.method, path: req.nextUrl.pathname, err: error },
         '[API_ERROR_INTERCEPTED]',
@@ -19,22 +35,22 @@ export function withApiHandler(handler: RouteHandler): RouteHandler {
 
       const errorMessage = error instanceof Error ? error.message : '服务器内部异常';
 
-      // 统一错误响应格式
       return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
     }
   };
 }
 
-/**
- * 快速返回 400 错误响应
- */
-export function badRequest(message: string) {
-  return NextResponse.json({ success: false, error: message }, { status: 400 });
+/** 抛出 400 客户端错误 */
+export function badRequest(message: string): never {
+  throw AppError.badRequest(message);
 }
 
-/**
- * 快速返回 200 成功响应
- */
+/** 抛出 404 资源不存在 */
+export function notFound(message: string): never {
+  throw AppError.notFound(message);
+}
+
+/** 快速返回 200 成功响应 */
 export function successResponse(data?: any) {
   return NextResponse.json({
     success: true,

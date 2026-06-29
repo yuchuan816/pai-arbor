@@ -10,7 +10,7 @@ export const DELETE = withApiHandler(
   async (_req: NextRequest, context: { params: Promise<SessionParams> }) => {
     const { id: sessionId } = await context.params;
 
-    if (!sessionId) return badRequest('缺少会话 ID');
+    if (!sessionId) badRequest('缺少会话 ID');
 
     const result = await softDeleteSessionMessages(sessionId);
 

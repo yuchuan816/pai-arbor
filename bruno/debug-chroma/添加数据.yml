@@ -1,0 +1,25 @@
+info:
+  name: 添加数据
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: http://localhost:3000/api/debug-chroma
+  body:
+    type: json
+    data: |-
+      {
+        "name": "e8d8ef5e-e94c-4503-b7f0-9bc0ae69a9bd",
+        "dataArray": [
+          "测试数据1",
+          "测试数据2"
+        ]
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

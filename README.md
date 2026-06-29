@@ -4,15 +4,15 @@
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 前端 | Next.js 16、React 19、Tailwind CSS 4、Vercel AI SDK |
-| 后端 | Next.js Route Handlers |
-| 关系数据库 | MySQL 8 + Prisma 7 |
-| 向量数据库 | ChromaDB |
-| 对象存储 | MinIO（S3 兼容） |
-| 日志 | Loki + Grafana（pino 推送） |
-| 模型服务 | Ollama（对话 + Embedding） |
+| 层级       | 技术                                                |
+| ---------- | --------------------------------------------------- |
+| 前端       | Next.js 16、React 19、Tailwind CSS 4、Vercel AI SDK |
+| 后端       | Next.js Route Handlers                              |
+| 关系数据库 | MySQL 8 + Prisma 7                                  |
+| 向量数据库 | ChromaDB                                            |
+| 对象存储   | MinIO（S3 兼容）                                    |
+| 日志       | Loki + Grafana（pino 推送）                         |
+| 模型服务   | Ollama（对话 + Embedding）                          |
 
 ## 前置依赖
 
@@ -50,23 +50,23 @@ docker compose up -d
 
 将启动以下服务：
 
-| 服务 | 端口 | 用途 |
-|------|------|------|
-| MySQL | 3306 | 会话、消息、文件元数据 |
-| ChromaDB | 8000 | 向量检索 |
-| MinIO | 9000（API）/ 9001（控制台） | 文件存储 |
-| Loki | 3100 | 日志接收 API（无 Web UI，应用往这里推送） |
-| Grafana | 3001 | 日志查询界面（admin / admin） |
+| 服务     | 端口                        | 用途                                      |
+| -------- | --------------------------- | ----------------------------------------- |
+| MySQL    | 3306                        | 会话、消息、文件元数据                    |
+| ChromaDB | 8000                        | 向量检索                                  |
+| MinIO    | 9000（API）/ 9001（控制台） | 文件存储                                  |
+| Loki     | 3100                        | 日志接收 API（无 Web UI，应用往这里推送） |
+| Grafana  | 3001                        | 日志查询界面（admin / admin）             |
 
 #### 日志与调试
 
 应用通过 [pino](https://getpino.io/) 输出结构化日志，LLM 请求/回复、记忆片段等动态上下文写入 Loki（不记录固定 system 提示词全文）。
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `LOG_LEVEL` | 日志级别 | `debug` |
-| `LOKI_URL` | Loki 推送地址 | `http://localhost:3100` |
-| `LOG_TO_LOKI` | 是否推送到 Loki | `true` |
+| 变量          | 说明            | 默认值                  |
+| ------------- | --------------- | ----------------------- |
+| `LOG_LEVEL`   | 日志级别        | `debug`                 |
+| `LOKI_URL`    | Loki 推送地址   | `http://localhost:3100` |
+| `LOG_TO_LOKI` | 是否推送到 Loki | `true`                  |
 
 - Grafana：[http://localhost:3001](http://localhost:3001) → Explore → 数据源 Loki（Label filters 可选 `event`）
 - 重启应用后新日志带 `event` label；
@@ -115,24 +115,25 @@ pnpm dev
 
 ## 环境变量
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `DATABASE_USER` | MySQL 用户名 | `root` |
-| `DATABASE_PASSWORD` | MySQL 密码 | `password` |
-| `DATABASE_HOST` | MySQL 主机 | `localhost` |
-| `DATABASE_PORT` | MySQL 端口 | `3306` |
-| `DATABASE_NAME` | 数据库名 | `pai_arbor` |
-| `CHROMA_HOST` | Chroma 主机 | `localhost` |
-| `CHROMA_PORT` | Chroma 端口 | `8000` |
-| `MINIO_ACCESS_KEY` | MinIO Access Key | `minioadmin` |
-| `MINIO_SECRET_KEY` | MinIO Secret Key | `miniopassword` |
-| `MINIO_BUCKET_NAME` | 存储桶名称 | `pai-arbor` |
-| `MINIO_ENDPOINT` | MinIO 地址 | `http://localhost:9000` |
-| `OLLAMA_HOST` | Ollama 服务地址 | `127.0.0.1:11434` |
-| `OLLAMA_MODEL` | 对话模型名称 | `gemma4:26b` |
-| `LOG_LEVEL` | 日志级别 | `debug` |
-| `LOKI_URL` | Loki 地址 | `http://localhost:3100` |
-| `LOG_TO_LOKI` | 是否推送 Loki | `true` |
+| 变量                | 说明             | 默认值                  |
+| ------------------- | ---------------- | ----------------------- |
+| `DATABASE_USER`     | MySQL 用户名     | `root`                  |
+| `DATABASE_PASSWORD` | MySQL 密码       | `password`              |
+| `DATABASE_HOST`     | MySQL 主机       | `localhost`             |
+| `DATABASE_PORT`     | MySQL 端口       | `3306`                  |
+| `DATABASE_NAME`     | 数据库名         | `pai_arbor`             |
+| `CHROMA_HOST`       | Chroma 主机      | `localhost`             |
+| `CHROMA_PORT`       | Chroma 端口      | `8000`                  |
+| `MINIO_ACCESS_KEY`  | MinIO Access Key | `minioadmin`            |
+| `MINIO_SECRET_KEY`  | MinIO Secret Key | `miniopassword`         |
+| `MINIO_BUCKET_NAME` | 存储桶名称       | `pai-arbor`             |
+| `MINIO_ENDPOINT`    | MinIO 地址       | `http://localhost:9000` |
+| `OLLAMA_HOST`       | Ollama 服务地址  | `127.0.0.1:11434`       |
+| `OLLAMA_MODEL`      | 对话模型名称     | `gemma4:26b`            |
+| `OLLAMA_EMBED_MODEL`| 向量嵌入模型     | `nomic-embed-text`      |
+| `LOG_LEVEL`         | 日志级别         | `debug`                 |
+| `LOKI_URL`          | Loki 地址        | `http://localhost:3100` |
+| `LOG_TO_LOKI`       | 是否推送 Loki    | `true`                  |
 
 ## 开发说明
 
@@ -155,6 +156,9 @@ pnpm exec prisma generate
 
 # 开发环境用，将 schema.prisma 结构同步到数据库
 pnpm exec prisma db push
+
+# 开发环境用，清库重建
+pnpm exec prisma db push --force-reset
 
 # 上线前用，对比本地的 schema.prisma 和当前的迁移历史，生成一个新的 SQL 迁移文件，并应用到本地开发数据库。
 pnpm exec prisma migrate dev

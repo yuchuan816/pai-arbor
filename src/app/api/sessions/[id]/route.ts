@@ -11,7 +11,7 @@ export const GET = withApiHandler(
   async (req: NextRequest, context: { params: Promise<SessionParams> }) => {
     const { id: sessionId } = await context.params;
 
-    if (!sessionId) return badRequest('缺少会话 ID');
+    if (!sessionId) badRequest('缺少会话 ID');
 
     const limitParam = req.nextUrl.searchParams.get('limit');
     const before = req.nextUrl.searchParams.get('before') ?? undefined;

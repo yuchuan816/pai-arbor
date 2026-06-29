@@ -33,8 +33,18 @@ schema_config:
         prefix: index_
         period: 24h
 
-ruler:
-  alertmanager_url: http://localhost:9093
-
 analytics:
   reporting_enabled: false
+
+ingester:
+  # 核心防丢配置：开启预写日志，不要指定 dir，它会自动进入 /loki/wal
+  wal:
+    enabled: true
+
+  # 核心防丢配置：优化内存 Chunk 的生存期与刷盘频率
+  chunk_idle_period: 2h
+  max_chunk_age: 1h
+  chunk_target_size: 1572864
+  chunk_block_size: 262144
+  flush_check_period: 10s
+  flush_op_timeout: 10s

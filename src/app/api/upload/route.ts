@@ -7,7 +7,7 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   const file = formData.get('file') as File | null;
 
   if (!file || !file.name?.endsWith('.md')) {
-    return badRequest('请上传有效的 Markdown 文件');
+    badRequest('请上传有效的 Markdown 文件');
   }
 
   const result = await importMarkdownFile(file);

@@ -3,6 +3,7 @@ import type { InputJsonValue } from '@prisma/client/runtime/client';
 import { ollamaProvider } from '@/lib/server/ollama';
 import { prisma } from '@/lib/server/prisma';
 import { logger } from '@/lib/server/logger';
+import { AppError } from '@/lib/server/app-error';
 import { buildSystemPrompt } from '@/services/prompt-builder.service';
 import { saveAssistantResponse, getContextMessages } from './message.service';
 
@@ -19,12 +20,9 @@ if (typeof ollamaModel !== 'string' || ollamaModel.trim() === '') {
  */
 export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
   const lastMessage = messages[messages.length - 1];
-  if (!lastMessage) {
-    throw new Error('消息列表不能为空');
-  }
 
   if (lastMessage.role !== 'user') {
-    throw new Error('最后一条消息必须是用户消息');
+    throw AppError.badRequest('最后一条消息必须是用户消息');
   }
 
   const userMessage = await prisma.message.create({

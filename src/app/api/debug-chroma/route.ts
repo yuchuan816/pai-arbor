@@ -2,8 +2,9 @@ import { type NextRequest } from 'next/server';
 import {
   getCollectionInfo,
   listAllCollections,
-  initTestCollection,
+  insertTestData,
   deleteCollection,
+  resetCollection,
 } from '@/services/debug-chroma.service';
 import { badRequest, successResponse, withApiHandler } from '@/lib/server/api-handler';
 
@@ -23,8 +24,13 @@ export const GET = withApiHandler(async (req: NextRequest) => {
  * 【POST】初始化/添加测试集合与数据
  * - /api/debug-chroma
  */
-export const POST = withApiHandler(async () => {
-  const result = await initTestCollection();
+export const POST = withApiHandler(async (req: NextRequest) => {
+  const { name, dataArray } = await req.json();
+
+  if (!name) badRequest('缺少 name 参数');
+  if (!(dataArray?.length > 0)) badRequest('数据数组不能为空');
+
+  const result = await insertTestData(name, dataArray);
   return successResponse(result);
 });
 
@@ -34,7 +40,16 @@ export const POST = withApiHandler(async () => {
  */
 export const DELETE = withApiHandler(async (req: NextRequest) => {
   const name = req.nextUrl.searchParams.get('name');
-  if (!name) return badRequest('缺少 name 参数');
+  const action = req.nextUrl.searchParams.get('action');
+  if (!name) badRequest('缺少 name 参数');
+
+  if (action === 'reset') {
+    const result = await resetCollection(name);
+    return successResponse({
+      message: `集合 ${name} 中的数据已成功清空（集合本身已保留）。`,
+      result,
+    });
+  }
 
   const result = await deleteCollection(name);
   return successResponse(result);

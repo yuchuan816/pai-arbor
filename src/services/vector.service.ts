@@ -1,5 +1,4 @@
-import { chromaClient } from '@/lib/server/chroma';
-import { OllamaEmbeddingFunction } from '@/lib/server/embeddings';
+import { chromaClient, getOllamaEmbeddingFunction } from '@/lib/server/chroma';
 
 interface AddChunksInput {
   fileId: string;
@@ -17,9 +16,6 @@ interface AddMemoryInput {
 export class VectorService {
   private docCollectionName = 'doc_knowledge_base';
   private memoryCollectionName = 'user_memory_base';
-  
-  // 初始化时传入对应的参数
-  private embed = new OllamaEmbeddingFunction({ model: 'nomic-embed-text' });
 
   /**
    * 内部通用 Collection 获取方法
@@ -27,7 +23,7 @@ export class VectorService {
   private async getCollection(name: string) {
     return await chromaClient.getOrCreateCollection({
       name: name,
-      embeddingFunction: this.embed,
+      embeddingFunction: getOllamaEmbeddingFunction(),
     });
   }
   

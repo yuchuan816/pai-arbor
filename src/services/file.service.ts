@@ -1,15 +1,8 @@
 // services/file.service.ts
 import { prisma } from '@/lib/server/prisma';
 import { s3Client } from '@/lib/server/s3';
+import { env } from '@/lib/server/env';
 import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-
-function getBucketName(): string {
-  const bucket = process.env.MINIO_BUCKET_NAME;
-  if (!bucket) {
-    throw new Error('❌ 严重环境错误: 缺少必要的环境变量 process.env.MINIO_BUCKET_NAME');
-  }
-  return bucket;
-}
 
 /**
  * 在 MySQL 记录元数据并嵌套创建切片占位符，同时上传至 MinIO
@@ -26,7 +19,7 @@ export async function createFileRecord(params: {
   // 上传至 OSS
   await s3Client.send(
     new PutObjectCommand({
-      Bucket: getBucketName(),
+      Bucket: env.MINIO_BUCKET_NAME,
       Key: ossKey,
       Body: params.fileBuffer,
       ContentType: 'text/markdown',
@@ -58,7 +51,7 @@ export async function deleteFileRecord(fileId: string) {
   // 清理 OSS
   await s3Client.send(
     new DeleteObjectCommand({
-      Bucket: getBucketName(),
+      Bucket: env.MINIO_BUCKET_NAME,
       Key: file.ossKey,
     }),
   );

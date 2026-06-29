@@ -3,15 +3,10 @@ import type { InputJsonValue } from '@prisma/client/runtime/client';
 import { ollamaProvider } from '@/lib/server/ollama';
 import { prisma } from '@/lib/server/prisma';
 import { logger } from '@/lib/server/logger';
+import { env } from '@/lib/server/env';
 import { AppError } from '@/lib/server/app-error';
 import { buildSystemPrompt } from '@/services/prompt-builder.service';
 import { saveAssistantResponse, getContextMessages } from './message.service';
-
-const ollamaModel = process.env.OLLAMA_MODEL ?? '';
-
-if (typeof ollamaModel !== 'string' || ollamaModel.trim() === '') {
-  throw new Error('❌ [Env Error]: 请检查环境变量 ollamaModel 是否正确注入。');
-}
 
 /**
  * 核心业务：控制并编排整个 RAG（检索增强生成）聊天流（适配 AI SDK 5.0 Parts 架构）
@@ -42,7 +37,7 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
   logger.info({
     event: 'llm.chat.request',
     sessionId,
-    model: ollamaModel,
+    model: env.OLLAMA_MODEL,
     userMessageId,
     userContent: lastUserContent,
     contextMessageCount: contextMessages.length,
@@ -54,7 +49,7 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
   const startedAt = Date.now();
 
   return streamText({
-    model: ollamaProvider(ollamaModel),
+    model: ollamaProvider(env.OLLAMA_MODEL),
     system: systemPrompt,
     messages: await convertToModelMessages(contextMessages),
 
@@ -82,7 +77,7 @@ export async function streamChatFlow(sessionId: string, messages: UIMessage[]) {
         logger.info({
           event: 'llm.chat.response',
           sessionId,
-          model: ollamaModel,
+          model: env.OLLAMA_MODEL,
           userMessageId,
           assistantMessageId,
           text,

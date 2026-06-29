@@ -115,25 +115,28 @@ pnpm dev
 
 ## 环境变量
 
-| 变量                | 说明             | 默认值                  |
-| ------------------- | ---------------- | ----------------------- |
-| `DATABASE_USER`     | MySQL 用户名     | `root`                  |
-| `DATABASE_PASSWORD` | MySQL 密码       | `password`              |
-| `DATABASE_HOST`     | MySQL 主机       | `localhost`             |
-| `DATABASE_PORT`     | MySQL 端口       | `3306`                  |
-| `DATABASE_NAME`     | 数据库名         | `pai_arbor`             |
-| `CHROMA_HOST`       | Chroma 主机      | `localhost`             |
-| `CHROMA_PORT`       | Chroma 端口      | `8000`                  |
-| `MINIO_ACCESS_KEY`  | MinIO Access Key | `minioadmin`            |
-| `MINIO_SECRET_KEY`  | MinIO Secret Key | `miniopassword`         |
-| `MINIO_BUCKET_NAME` | 存储桶名称       | `pai-arbor`             |
-| `MINIO_ENDPOINT`    | MinIO 地址       | `http://localhost:9000` |
-| `OLLAMA_HOST`       | Ollama 服务地址  | `127.0.0.1:11434`       |
-| `OLLAMA_MODEL`      | 对话模型名称     | `gemma4:26b`            |
-| `OLLAMA_EMBED_MODEL`| 向量嵌入模型     | `nomic-embed-text`      |
-| `LOG_LEVEL`         | 日志级别         | `debug`                 |
-| `LOKI_URL`          | Loki 地址        | `http://localhost:3100` |
-| `LOG_TO_LOKI`       | 是否推送 Loki    | `true`                  |
+服务端统一从 [`src/lib/server/env.ts`](src/lib/server/env.ts) 读取配置；本地开发可复制 [`.env.example`](.env.example) 为 `.env`。**除 `OLLAMA_HOST` 外均为必填**（未设置则启动报错）。
+
+| 变量                 | 说明             | 必填 |
+| -------------------- | ---------------- | ---- |
+| `NODE_ENV`           | 运行环境         | 是   |
+| `DATABASE_USER`      | MySQL 用户名     | 是   |
+| `DATABASE_PASSWORD`  | MySQL 密码       | 是   |
+| `DATABASE_HOST`      | MySQL 主机       | 是   |
+| `DATABASE_PORT`      | MySQL 端口       | 是   |
+| `DATABASE_NAME`      | 数据库名         | 是   |
+| `CHROMA_HOST`        | Chroma 主机      | 是   |
+| `CHROMA_PORT`        | Chroma 端口      | 是   |
+| `MINIO_ACCESS_KEY`   | MinIO Access Key | 是   |
+| `MINIO_SECRET_KEY`   | MinIO Secret Key | 是   |
+| `MINIO_BUCKET_NAME`  | 存储桶名称       | 是   |
+| `MINIO_ENDPOINT`     | MinIO 地址       | 是   |
+| `OLLAMA_HOST`        | Ollama 服务地址  | 否（不设则用 `127.0.0.1:11434`） |
+| `OLLAMA_MODEL`       | 对话模型名称     | 是   |
+| `OLLAMA_EMBED_MODEL` | 向量嵌入模型     | 是   |
+| `LOG_LEVEL`          | 日志级别         | 是   |
+| `LOKI_URL`           | Loki 地址        | 是   |
+| `LOG_TO_LOKI`        | 是否推送 Loki    | 是（`true` / `false`） |
 
 ## 开发说明
 

@@ -1,15 +1,15 @@
 // import 'dotenv/config';
 import { PrismaClient } from '@/generated/prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { env } from '@/lib/server/env';
 
 const prismaClientSingleton = () => {
-  // 也可以直接在这里硬编码本地参数
   const adapter = new PrismaMariaDb({
-    host: process.env.DATABASE_HOST,
-    port: Number(process.env.DATABASE_PORT),
-    user: process.env.DATABASE_USER,
-    password: process.env.DATABASE_PASSWORD,
-    database: process.env.DATABASE_NAME,
+    host: env.DATABASE_HOST,
+    port: env.DATABASE_PORT,
+    user: env.DATABASE_USER,
+    password: env.DATABASE_PASSWORD,
+    database: env.DATABASE_NAME,
     connectionLimit: 20,
 
     allowPublicKeyRetrieval: true,
@@ -17,7 +17,7 @@ const prismaClientSingleton = () => {
 
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV !== 'production' ? ['error'] : ['query', 'error', 'warn'],
+    log: env.NODE_ENV !== 'production' ? ['error'] : ['query', 'error', 'warn'],
   });
 };
 
@@ -27,6 +27,6 @@ declare const globalThis: {
 
 export const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
 
-if (process.env.NODE_ENV !== 'production') {
+if (env.NODE_ENV !== 'production') {
   globalThis.prismaGlobal = prisma;
 }

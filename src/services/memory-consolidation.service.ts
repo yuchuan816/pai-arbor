@@ -3,13 +3,13 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { prisma } from '@/lib/server/prisma';
 import { getStructuredOllamaModel } from '@/lib/server/ollama';
+import { env } from '@/lib/server/env';
 import { logger } from '@/lib/server/logger';
 import { VectorService } from '@/services/vector.service';
 import { updateConsolidationJob } from '@/services/consolidation-job.service';
 import type { ConsolidationJob, ExtractedMemory } from '@/types/consolidation-job';
 
 const vectorService = new VectorService();
-const ollamaModel = process.env.OLLAMA_MODEL ?? '';
 const SESSION_STATUS_COMPLETED = 'completed';
 const DEFAULT_USER_ID = 'default';
 
@@ -336,7 +336,7 @@ async function extractMemoriesFromTranscript(
   logger.info({
     event: 'llm.consolidation.request',
     jobId: job.id,
-    model: ollamaModel,
+    model: env.OLLAMA_MODEL,
     messageIds,
     messageCount: messageIds.length,
     transcript,
@@ -345,7 +345,7 @@ async function extractMemoriesFromTranscript(
 
   try {
     const { output, text } = await generateText({
-      model: getStructuredOllamaModel(ollamaModel),
+      model: getStructuredOllamaModel(env.OLLAMA_MODEL),
       output: Output.object({ schema: consolidationOutputSchema }),
       system: MEMORY_EXTRACTION_PROMPT,
       prompt: userPrompt,
@@ -359,7 +359,7 @@ async function extractMemoriesFromTranscript(
     logger.info({
       event: 'llm.consolidation.response',
       jobId: job.id,
-      model: ollamaModel,
+      model: env.OLLAMA_MODEL,
       messageIds,
       response: text,
       output,

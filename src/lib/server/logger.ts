@@ -1,26 +1,23 @@
 import pino from 'pino';
-
-const level = process.env.LOG_LEVEL;
-const logToLoki = process.env.LOG_TO_LOKI === 'true';
-const lokiHost = process.env.LOKI_URL;
+import { env } from '@/lib/server/env';
 
 function buildLogger(): pino.Logger {
-  if (!logToLoki) {
+  if (!env.LOG_TO_LOKI) {
     return pino({ level: 'silent' });
   }
 
   const transport = pino.transport({
     target: 'pino-loki',
     options: {
-      host: lokiHost,
+      host: env.LOKI_URL,
       labels: { app: 'pai-arbor' },
       propsToLabels: ['event'],
       batching: { interval: 5 },
     },
-    level,
+    level: env.LOG_LEVEL,
   });
 
-  return pino({ level, base: { app: 'pai-arbor' } }, transport);
+  return pino({ level: env.LOG_LEVEL, base: { app: 'pai-arbor' } }, transport);
 }
 
 export const logger = buildLogger();
